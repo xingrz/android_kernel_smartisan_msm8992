@@ -686,6 +686,7 @@ int32_t msm_sensor_driver_probe(void *setting,
 
 		slave_info->i2c_freq_mode = slave_info32->i2c_freq_mode;
 		slave_info->sensor_id_info = slave_info32->sensor_id_info;
+		slave_info->sensor_vendor_id_info = slave_info32->sensor_vendor_id_info;
 
 		slave_info->slave_addr = slave_info32->slave_addr;
 		slave_info->power_setting_array.size =
@@ -726,6 +727,9 @@ int32_t msm_sensor_driver_probe(void *setting,
 		slave_info->sensor_id_info.sensor_id_reg_addr,
 		slave_info->sensor_id_info.sensor_id,
 		slave_info->sensor_id_info.sensor_id_mask);
+	CDBG("sensor_vendor_id 0x%X sensor_vendor_id_mask 0x%X",
+		slave_info->sensor_vendor_id_info.sensor_vendor_id,
+		slave_info->sensor_vendor_id_info.sensor_vendor_id_mask);
 	CDBG("power up size %d power down size %d\n",
 		slave_info->power_setting_array.size,
 		slave_info->power_setting_array.size_down);
@@ -802,6 +806,9 @@ int32_t msm_sensor_driver_probe(void *setting,
 		slave_info->sensor_id_info.sensor_id_reg_addr;
 	camera_info->sensor_id = slave_info->sensor_id_info.sensor_id;
 	camera_info->sensor_id_mask = slave_info->sensor_id_info.sensor_id_mask;
+
+	camera_info->vendor_id = slave_info->sensor_vendor_id_info.sensor_vendor_id;
+	camera_info->vendor_id_mask = slave_info->sensor_vendor_id_info.sensor_vendor_id_mask;
 
 	/* Fill CCI master, slave address and CCI default params */
 	if (!s_ctrl->sensor_i2c_client) {
@@ -1187,7 +1194,7 @@ static int32_t msm_sensor_driver_parse(struct msm_sensor_ctrl_t *s_ctrl)
 
 	/* Store sensor control structure in static database */
 	g_sctrl[s_ctrl->id] = s_ctrl;
-	CDBG("g_sctrl[%d] %p", s_ctrl->id, g_sctrl[s_ctrl->id]);
+	pr_err("g_sctrl[%d] %p", s_ctrl->id, g_sctrl[s_ctrl->id]);
 
 	return rc;
 

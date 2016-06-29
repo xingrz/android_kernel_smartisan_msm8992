@@ -192,7 +192,7 @@
 			qcom,fastchg-current-ma = <2000>;
 			qcom,float-voltage-mv = <4350>;
 			qcom,resume-delta-mv = <200>;
-			qcom,chg-inhibit-fg;
+            qcom,chg-inhibit-fg;
 			qcom,dc-psy-type = "Mains";
 			qcom,dc-psy-ma = <1500>;
 			qcom,rparasitic-uohm = <100000>;
@@ -535,7 +535,7 @@
 			qcom,en-ext-pfet-sc-pro;
 		};
 
-		pmi8994_haptics: qcom,haptic@c000 {
+		/*pmi8994_haptics: qcom,haptic@c000 {
 			status = "disabled";
 			compatible = "qcom,qpnp-haptic";
 			reg = <0xc000 0x100>;
@@ -557,9 +557,9 @@
 			qcom,wave-samples = [3e 3e 3e 3e 3e 3e 3e 3e];
 			qcom,wave-rep-cnt = <1>;
 			qcom,wave-samp-rep-cnt = <1>;
-		};
+		};*/
 
-		qcom,leds@d000 {
+		/*qcom,leds@d000 {
 			compatible = "qcom,leds-qpnp";
 			reg = <0xd000 0x100>;
 			label = "rgb";
@@ -601,7 +601,7 @@
 				linux,name = "blue";
 				linux,default-trigger = "boot-indication";
 			};
-		};
+		};*/
 
 		qcom,leds@d300 {
 			compatible = "qcom,qpnp-flash-led";

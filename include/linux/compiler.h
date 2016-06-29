@@ -364,6 +364,10 @@ void ftrace_likely_update(struct ftrace_branch_data *f, int val, int expect);
 #ifdef CONFIG_KPROBES
 # define __kprobes	__attribute__((__section__(".kprobes.text")))
 #else
+#ifdef CONFIG_ICESKY_KP
+# define __kprobes	__attribute__((__section__(".kprobes.text")))
+#else
 # define __kprobes
+#endif
 #endif
 #endif /* __LINUX_COMPILER_H */

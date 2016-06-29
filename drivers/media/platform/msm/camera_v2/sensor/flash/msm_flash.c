@@ -217,21 +217,6 @@ static int32_t msm_flash_i2c_init(
 		flash_ctrl->power_setting_array.power_setting =
 			compat_ptr(power_setting_array32->power_setting);
 
-		/* Validate power_up array size and power_down array size */
-		if ((!flash_ctrl->power_setting_array.size) ||
-			(flash_ctrl->power_setting_array.size >
-			MAX_POWER_CONFIG) ||
-			(!flash_ctrl->power_setting_array.size_down) ||
-			(flash_ctrl->power_setting_array.size_down >
-			MAX_POWER_CONFIG)) {
-
-			pr_err("failed: invalid size %d, size_down %d",
-				flash_ctrl->power_setting_array.size,
-				flash_ctrl->power_setting_array.size_down);
-			kfree(power_setting_array32);
-			power_setting_array32 = NULL;
-			return -EINVAL;
-		}
 		/* Copy the settings from compat struct to regular struct */
 		msm_flash_copy_power_settings_compat(
 			flash_ctrl->power_setting_array.power_setting_a,
@@ -341,9 +326,40 @@ static int32_t msm_flash_gpio_init(
 }
 
 static int32_t msm_flash_i2c_release(
-	struct msm_flash_ctrl_t *flash_ctrl)
+	struct msm_flash_ctrl_t *flash_ctrl,
+	struct msm_flash_cfg_data_t *flash_data)
 {
 	int32_t rc = 0;
+	struct msm_camera_i2c_reg_setting_array *settings = NULL;
+
+	if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_RELEASE) {
+		pr_err("%s:%d Invalid flash state = %d",
+			__func__, __LINE__, flash_ctrl->flash_state);
+		return 0;
+	}
+
+	if (flash_data->cfg.settings) {
+		settings = kzalloc(sizeof(struct msm_camera_i2c_reg_setting_array), GFP_KERNEL);
+		if (!settings) {
+			pr_err("%s mem allocation failed %d\n", __func__, __LINE__);
+			return -ENOMEM;
+		}
+
+		if (copy_from_user(settings, (void *)flash_data->cfg.settings,
+			sizeof(struct msm_camera_i2c_reg_setting_array))) {
+			kfree(settings);
+			pr_err("%s copy_from_user failed %d\n", __func__, __LINE__);
+			return -EFAULT;
+		}
+
+		rc = msm_flash_i2c_write_table(flash_ctrl, settings);
+		kfree(settings);
+
+		if (rc < 0) {
+			pr_err("%s:%d msm_flash_i2c_write_table rc = %d failed\n",
+				__func__, __LINE__, rc);
+		}
+	}
 
 	if (!(&flash_ctrl->power_info) || !(&flash_ctrl->flash_i2c_client)) {
 		pr_err("%s:%d failed: %p %p\n",
@@ -360,6 +376,8 @@ static int32_t msm_flash_i2c_release(
 			__func__, __LINE__);
 		return -EINVAL;
 	}
+
+	flash_ctrl->flash_state = MSM_CAMERA_FLASH_RELEASE;
 	return 0;
 }
 
@@ -557,7 +575,8 @@ static int32_t msm_flash_high(
 }
 
 static int32_t msm_flash_release(
-	struct msm_flash_ctrl_t *flash_ctrl)
+	struct msm_flash_ctrl_t *flash_ctrl,
+	struct msm_flash_cfg_data_t *flash_data)
 {
 	int32_t rc = 0;
 	if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_RELEASE) {
@@ -594,7 +613,7 @@ static int32_t msm_flash_config(struct msm_flash_ctrl_t *flash_ctrl,
 	case CFG_FLASH_RELEASE:
 		if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)
 			rc = flash_ctrl->func_tbl->camera_flash_release(
-				flash_ctrl);
+				flash_ctrl, flash_data);
 		break;
 	case CFG_FLASH_OFF:
 		if (flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)
@@ -982,6 +1001,7 @@ static long msm_flash_subdev_do_ioctl(
 		case CFG_FLASH_OFF:
 		case CFG_FLASH_LOW:
 		case CFG_FLASH_HIGH:
+		case CFG_FLASH_RELEASE:
 			flash_data.cfg.settings = compat_ptr(u32->cfg.settings);
 			break;
 		case CFG_FLASH_INIT:
@@ -1060,6 +1080,7 @@ static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 	flash_ctrl->power_info.dev = &flash_ctrl->pdev->dev;
 	flash_ctrl->flash_device_type = MSM_CAMERA_PLATFORM_DEVICE;
 	flash_ctrl->flash_mutex = &msm_flash_mutex;
+	flash_ctrl->flash_i2c_client.addr_type = MSM_CAMERA_I2C_BYTE_ADDR;
 	flash_ctrl->flash_i2c_client.i2c_func_tbl = &msm_sensor_cci_func_tbl;
 	flash_ctrl->flash_i2c_client.cci_client = kzalloc(
 		sizeof(struct msm_camera_cci_client), GFP_KERNEL);

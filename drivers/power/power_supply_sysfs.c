@@ -55,7 +55,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"Unknown", "N/A", "Trickle", "Fast", "Taper"
 	};
 	static char *health_text[] = {
-		"Unknown", "Good", "Overheat", "Warm", "Dead", "Over voltage",
+		"Unknown", "Good", "Overheat", "Good", "Dead", "Over voltage",
 		"Unspecified failure", "Cold", "Cool", "Watchdog timer expire",
 		"Safety timer expire"
 	};

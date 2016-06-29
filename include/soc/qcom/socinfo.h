@@ -46,12 +46,24 @@
 #define of_board_is_skuf()	of_machine_is_compatible("qcom,skuf")
 #define of_board_is_sbc()	of_machine_is_compatible("qcom,sbc")
 
+/* Smartisan IceSky reserved start */
+#define of_board_is_icesky()	of_machine_is_compatible("qcom,icesky")
+#define of_board_is_icesky_p1()	of_machine_is_compatible("qcom,icesky-p1")
+#define of_board_is_icesky_p2()	of_machine_is_compatible("qcom,icesky-p2")
+#define of_board_is_icesky_p3()	of_machine_is_compatible("qcom,icesky-p3")
+#define of_board_is_icesky_p4()	of_machine_is_compatible("qcom,icesky-p4")
+#define of_board_is_icesky_p5()	of_machine_is_compatible("qcom,icesky-p5")
+/* Smartisan IceSky reserved end */
+
 #define machine_is_msm8974()	of_machine_is_compatible("qcom,msm8974")
 #define machine_is_msm9625()	of_machine_is_compatible("qcom,msm9625")
 #define machine_is_msm8610()	of_machine_is_compatible("qcom,msm8610")
 #define machine_is_msm8226()	of_machine_is_compatible("qcom,msm8226")
 #define machine_is_apq8074()	of_machine_is_compatible("qcom,apq8074")
 #define machine_is_msm8926()	of_machine_is_compatible("qcom,msm8926")
+
+#define machine_is_msm8992()	of_machine_is_compatible("qcom,msm8992")
+#define machine_is_msm8994()	of_machine_is_compatible("qcom,msm8994")
 
 #define early_machine_is_msm8610()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8610")

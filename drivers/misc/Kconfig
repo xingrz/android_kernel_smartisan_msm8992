@@ -620,6 +620,13 @@ config QCOM_LIQUID_DOCK
 	  the docking station of various models of Qualcomm Technology's
 	  LiQUID Mobile Development Platforms.
 
+config TFA9890
+	tristate "NXP tfa9890 driver"
+	depends on I2C
+	help
+	  The TFA9890 is a high efficiency class-D audio amplifier with a
+	  sophisticated speaker boost and protection algorithm.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

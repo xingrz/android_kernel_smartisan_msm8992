@@ -574,7 +574,7 @@ static int mdss_mdp_wb_wait4comp(struct mdss_mdp_ctl *ctl, void *arg)
 		mask = BIT(ctx->intr_type + ctx->intf_num);
 
 		isr = readl_relaxed(ctl->mdata->mdp_base +
-					MDSS_MDP_REG_INTR_STATUS);
+				MDSS_MDP_REG_INTR_STATUS);
 		status = mask & isr;
 
 		pr_info_once("mask: 0x%x, isr: 0x%x, status: 0x%x\n",
@@ -592,7 +592,7 @@ static int mdss_mdp_wb_wait4comp(struct mdss_mdp_ctl *ctl, void *arg)
 			mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_TIMEOUT);
 			rc = -ENODEV;
 			WARN(1, "writeback kickoff timed out (%d) ctl=%d\n",
-							rc, ctl->num);
+					rc, ctl->num);
 		}
 	} else {
 		rc = 0;

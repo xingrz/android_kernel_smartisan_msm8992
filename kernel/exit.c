@@ -59,6 +59,7 @@
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
 
+
 static void exit_mm(struct task_struct * tsk);
 
 static void __unhash_process(struct task_struct *p, bool group_dead)
@@ -115,32 +116,28 @@ static void __exit_signal(struct task_struct *tsk)
 
 		if (tsk == sig->curr_target)
 			sig->curr_target = next_thread(tsk);
-		/*
-		 * Accumulate here the counters for all threads but the
-		 * group leader as they die, so they can be added into
-		 * the process-wide totals when those are taken.
-		 * The group leader stays around as a zombie as long
-		 * as there are other threads.  When it gets reaped,
-		 * the exit.c code will add its counts into these totals.
-		 * We won't ever get here for the group leader, since it
-		 * will have been the last reference on the signal_struct.
-		 */
-		task_cputime(tsk, &utime, &stime);
-		sig->utime += utime;
-		sig->stime += stime;
-		sig->gtime += task_gtime(tsk);
-		sig->min_flt += tsk->min_flt;
-		sig->maj_flt += tsk->maj_flt;
-		sig->nvcsw += tsk->nvcsw;
-		sig->nivcsw += tsk->nivcsw;
-		sig->inblock += task_io_get_inblock(tsk);
-		sig->oublock += task_io_get_oublock(tsk);
-		task_io_accounting_add(&sig->ioac, &tsk->ioac);
-		sig->sum_sched_runtime += tsk->se.sum_exec_runtime;
 	}
 
-	sig->nr_threads--;
-	__unhash_process(tsk, group_dead);
+	 /*
+         * Accumulate here the counters for all threads as they die. We could
+         * skip the group leader because it is the last user of signal_struct,
+         * but we want to avoid the race with thread_group_cputime() which can
+         * see the empty ->thread_head list.
+         */
+        task_cputime(tsk, &utime, &stime);
+        sig->utime += utime;
+        sig->stime += stime;
+        sig->gtime += task_gtime(tsk);
+        sig->min_flt += tsk->min_flt;
+        sig->maj_flt += tsk->maj_flt;
+        sig->nvcsw += tsk->nvcsw;
+        sig->nivcsw += tsk->nivcsw;
+        sig->inblock += task_io_get_inblock(tsk);
+        sig->oublock += task_io_get_oublock(tsk);
+        task_io_accounting_add(&sig->ioac, &tsk->ioac);
+        sig->sum_sched_runtime += tsk->se.sum_exec_runtime;
+        sig->nr_threads--;
+        __unhash_process(tsk, group_dead);
 
 	/*
 	 * Do this under ->siglock, we can race with another thread

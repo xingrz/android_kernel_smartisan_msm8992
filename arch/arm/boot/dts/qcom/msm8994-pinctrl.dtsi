@@ -94,7 +94,7 @@
 			};
 		};
 
-		pmx_hdmi_cec: pmx_hdmi_cec {
+		/*pmx_hdmi_cec: pmx_hdmi_cec {
 			qcom,pin-func = <1>;
 			label = "hdmi-cec-pins";
 			mdss_hdmi_cec_active: cec_active {
@@ -131,7 +131,7 @@
 				drive-strength = <2>;
 				bias-pull-down;
 			};
-		};
+		};*/
 
 		mhl_intr: mhl_intr {
 			qcom,pins = <&gp 57>;
@@ -158,8 +158,8 @@
 			};
 		};
 
-		spi_0_active {
-			/* MOSI, MISO, CLK */
+		/*spi_0_active {
+			// MOSI, MISO, CLK
 			qcom,pins = <&gp 0>, <&gp 1>, <&gp 3>;
 			qcom,num-grp-pins = <3>;
 			qcom,pin-func = <1>;
@@ -172,7 +172,7 @@
 		};
 
 		spi_0_suspend {
-			/* MOSI, MISO, CLK */
+			// MOSI, MISO, CLK
 			qcom,pins = <&gp 0>, <&gp 1>, <&gp 3>;
 			qcom,num-grp-pins = <3>;
 			qcom,pin-func = <1>;
@@ -182,7 +182,7 @@
 			       drive-strength = <2>;
 			       bias-pull-down;
 		        };
-		};
+		};*/
 
 		spi_cs1_active {
 			/* CS1 */
@@ -429,7 +429,7 @@
 			};
 		};
 
-		pmx_fm_int_active {
+		/*pmx_fm_int_active {
 			qcom,pins = <&gp 9>;
 			qcom,pin-func = <0>;
 			qcom,num-grp-pins = <1>;
@@ -499,7 +499,7 @@
 				drive-strength = <16>;
 				bias-pull-down;
 			};
-		};
+		};*/
 
 		pmx_i2c_6 {
 			qcom,pins = <&gp 28>, <&gp 27>; /* SDA, SCL */
@@ -1199,35 +1199,12 @@
 			};
 		};
 
-		cnss_pmux: cnss_pmux {
-			qcom,pins = <&gp 113>;
-			qcom,num-grp-pins = <1>;
-			qcom,pin-func = <0>;
-			label = "cnss_pins";
-			cnss_default: default {
-				drive-strength = <16>;
-				bias-pull-down;
-			};
-		};
-
-		cnss_lpass: cnss_lpass {
-			qcom,pins = <&gp 112>;
-			qcom,num-grp-pins = <1>;
-			qcom,pin-func = <0>;
-			label = "cnss-lpass";
-			/* default state */
-			cnss_lpass_default: cnss_lpass_default {
-				drive-strength = <16>;
-				bias-pull-down;
-			};
-		};
-
-		pcie0_clkreq {
+		/*pcie0_clkreq {
 			qcom,pins = <&gp 54>;
 			qcom,num-grp-pins = <1>;
 			qcom,pin-func = <2>;
 			label = "pcie0-clkreq";
-			/* default state */
+			// default state
 			pcie0_clkreq_default: pcie0_clkreq_default {
 				drive-strength = <2>;
 				bias-pull-up;
@@ -1238,7 +1215,7 @@
 			qcom,pins = <&gp 53>;
 			qcom,num-grp-pins = <1>;
 			label = "pcie0-perst";
-			/* default state */
+			// default state
 			pcie0_perst_default: pcie0_perst_default {
 				drive-strength = <2>;
 				bias-pull-down;
@@ -1249,12 +1226,12 @@
 			qcom,pins = <&gp 55>;
 			qcom,num-grp-pins = <1>;
 			label = "pcie0-wake";
-			/* default state */
+			// default state
 			pcie0_wake_default: pcie0_wake_default {
 				drive-strength = <2>;
 				bias-pull-down;
 			};
-		};
+		};*/
 
 		pcie1_clkreq {
 			qcom,pins = <&gp 36>;
@@ -1389,54 +1366,5 @@
 			};
 		};
 
-		tsif0_signals {
-			qcom,pins = <&gp 89>,	/* TSIF0 CLK */
-				<&gp 90>,	/* TSIF0 Enable */
-				<&gp 91>;	/* TSIF0 DATA */
-			qcom,num-grp-pins = <3>;
-			qcom,pin-func = <1>;
-			label = "tsif0-signals";
-			tsif0_signals_active: tsif0_signals_active {
-				drive_strength = <2>;	/* 2 mA */
-				bias-pull-down;		/* pull down */
-			};
-		};
-
-		/* sync signal is only used if configured to mode-2 */
-		tsif0_sync {
-			qcom,pins = <&gp 110>;	/* TSIF0 SYNC */
-			qcom,num-grp-pins = <1>;
-			qcom,pin-func = <1>;
-			label = "tsif0-sync";
-			tsif0_sync_active: tsif0_sync_active {
-				drive_strength = <2>;	/* 2 mA */
-				bias-pull-down;		/* pull down */
-			};
-		};
-
-		tsif1_signals {
-			qcom,pins = <&gp 93>,	/* TSIF1 CLK */
-				<&gp 94>,	/* TSIF1 Enable */
-				<&gp 95>;	/* TSIF1 DATA */
-			qcom,num-grp-pins = <3>;
-			qcom,pin-func = <1>;
-			label = "tsif1-signals";
-			tsif1_signals_active: tsif1_signals_active {
-				drive_strength = <2>;	/* 2 mA */
-				bias-pull-down;		/* pull down */
-			};
-		};
-
-		/* sync signal is only used if configured to mode-2 */
-		tsif1_sync {
-			qcom,pins = <&gp 96>;	/* TSIF1 SYNC */
-			qcom,num-grp-pins = <1>;
-			qcom,pin-func = <1>;
-			label = "tsif1-sync";
-			tsif1_sync_active: tsif1_sync_active {
-				drive_strength = <2>;	/* 2 mA */
-				bias-pull-down;		/* pull down */
-			};
-		};
 	};
 };

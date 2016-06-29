@@ -1689,8 +1689,10 @@ static int __cpuinit timer_cpu_notify(struct notifier_block *self,
 	case CPU_UP_PREPARE:
 	case CPU_UP_PREPARE_FROZEN:
 		err = init_timers_cpu(cpu);
-		if (err < 0)
+		if (err < 0){
+			printk(KERN_ERR "%s\n", __func__);
 			return notifier_from_errno(err);
+		}
 		break;
 #ifdef CONFIG_HOTPLUG_CPU
 	case CPU_DEAD:

@@ -545,7 +545,7 @@ char *socinfo_get_build_id(void)
 
 static char *msm_read_hardware_id(void)
 {
-	static char msm_soc_str[256] = "Qualcomm Technologies, Inc ";
+	static char msm_soc_str[256] = "Qualcomm Technologies, Inc. ";
 	static bool string_generated;
 	int ret = 0;
 
@@ -732,6 +732,9 @@ msm_get_platform_subtype(struct device *dev,
 		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
 					qrd_hw_platform_subtype[hw_subtype]);
 	}
+
+	if (hw_subtype >= PLATFORM_SUBTYPE_INVALID)
+		hw_subtype = PLATFORM_SUBTYPE_STRANGE_2A;
 
 	return snprintf(buf, PAGE_SIZE, "%-.32s\n",
 		hw_platform_subtype[hw_subtype]);

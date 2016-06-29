@@ -31,6 +31,9 @@
 
 #include "power.h"
 
+extern int  Readwakeup_sources( void );
+extern ssize_t pm_show_All_wakelocks( void );
+
 const char *const pm_states[PM_SUSPEND_MAX] = {
 	[PM_SUSPEND_FREEZE]	= "freeze",
 	[PM_SUSPEND_STANDBY]	= "standby",
@@ -399,6 +402,10 @@ int pm_suspend(suspend_state_t state)
 		return -EINVAL;
 
 	pm_suspend_marker("entry");
+
+	Readwakeup_sources();
+	pm_show_All_wakelocks();
+
 	error = enter_state(state);
 	if (error) {
 		suspend_stats.fail++;
@@ -406,6 +413,10 @@ int pm_suspend(suspend_state_t state)
 	} else {
 		suspend_stats.success++;
 	}
+
+	Readwakeup_sources();
+	pm_show_All_wakelocks();
+
 	pm_suspend_marker("exit");
 	return error;
 }

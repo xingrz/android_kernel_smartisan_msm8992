@@ -19,6 +19,8 @@
 
 struct device;
 
+#define SOC_RADIX	10	// Used for high-precision battery capacity.
+
 /*
  * All voltages, currents, charges, energies, time and temperatures in uV,
  * µA, µAh, µWh, seconds and tenths of degree Celsius unless otherwise

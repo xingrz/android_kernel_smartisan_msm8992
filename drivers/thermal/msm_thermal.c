@@ -2961,7 +2961,7 @@ static int __ref msm_thermal_cpu_callback(struct notifier_block *nfb,
 
 	if (action == CPU_UP_PREPARE || action == CPU_UP_PREPARE_FROZEN) {
 		if (!cpumask_test_and_set_cpu(cpu, cpus_previously_online))
-			pr_debug("Total prev cores online tracked %u\n",
+			printk(KERN_ERR"Total prev cores online tracked %u\n",
 				cpumask_weight(cpus_previously_online));
 		if (core_control_enabled &&
 			(msm_thermal_info.core_control_mask & BIT(cpu)) &&
@@ -2973,7 +2973,7 @@ static int __ref msm_thermal_cpu_callback(struct notifier_block *nfb,
 	} else if (action == CPU_DOWN_PREPARE ||
 				action == CPU_DOWN_PREPARE_FROZEN) {
 		if (!cpumask_test_and_set_cpu(cpu, cpus_previously_online))
-			pr_debug("Total prev cores online tracked %u\n",
+			printk(KERN_ERR"Total prev cores online tracked %u\n",
 				cpumask_weight(cpus_previously_online));
 	}
 

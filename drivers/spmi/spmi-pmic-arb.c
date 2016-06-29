@@ -28,6 +28,11 @@
 #include <linux/irqchip/qpnp-int.h>
 #include "spmi-dbgfs.h"
 
+//#include <linux/mm.h>
+#include <asm/uaccess.h>
+//#include <asm/mmu_context.h>
+
+#define   WAKEUPSOURCE  "/sys/kernel/debug/wakeup_sources"
 #define SPMI_PMIC_ARB_NAME		"spmi_pmic_arb"
 
 /* PMIC Arbiter configuration registers */
@@ -224,6 +229,62 @@ struct spmi_pmic_arb_dev {
 };
 
 static struct spmi_pmic_arb_dev *the_pmic_arb;
+
+#ifndef _BUILD_MOL
+int  Readwakeup_sources( void )
+{
+	struct file *fp;
+	char  buffer[400];
+	int  readlen=400;
+	int  length=0;
+	mm_segment_t old_fs;
+
+	fp=filp_open(WAKEUPSOURCE, O_RDONLY, 0 );
+	if(IS_ERR(fp)) {
+		printk("open wakeup_sources failed \n");
+		return -1;
+	}
+
+	if (!fp->f_op || (!fp->f_op->read && !fp->f_op->aio_read)) {
+		printk(" file not readable...\n " );
+		goto done;
+	}
+
+	memset(buffer, 0, sizeof(buffer));
+	old_fs = get_fs();
+	set_fs(get_ds());
+	length = vfs_read(fp, (void __user *)buffer, readlen, &fp->f_pos);
+	set_fs(old_fs);
+
+	if( length<0 )
+		goto done;
+
+	printk("%s, length=%d\n",  __func__, length );
+	printk("begining:-->%s<--ending \n",  buffer );
+
+done:
+	filp_close(fp,NULL);
+	return 0;
+}
+#else
+int  Readwakeup_sources( void )
+{
+	return 0;
+}
+#endif
+
+int  WritePMICData(  	u8 sid, u16 addr, u8 *buf, int len )
+{
+    u8  Value=0;
+    spmi_ext_register_readl( &(the_pmic_arb->controller), sid, addr, buf, 1 );
+    Value=buf[0]&0x7F;
+    return  spmi_ext_register_writel(&(the_pmic_arb->controller),  sid,  addr, &Value, 1 );
+}
+
+int  ReadPMICData(  	u8 sid, u16 addr, u8 *buf, int len )
+{
+   return spmi_ext_register_readl( &(the_pmic_arb->controller), sid, addr, buf, 1 );
+}
 
 static phys_addr_t pmic_arb_chnl_ofst_v1(struct spmi_pmic_arb_dev *dev,
 							u8 sid, u16 addr)

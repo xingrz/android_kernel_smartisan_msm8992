@@ -31,6 +31,29 @@ struct wakelock {
 
 static struct rb_root wakelocks_tree = RB_ROOT;
 
+#ifndef _BUILD_MOL
+ssize_t pm_show_All_wakelocks( void )
+{
+	struct rb_node *node;
+	struct wakelock *wl;
+
+	for (node = rb_first(&wakelocks_tree); node; node = rb_next(node)) {
+		wl = rb_entry(node, struct wakelock, node);
+
+		if((wl!=NULL) && (wl->ws.active==true)) {
+			printk("Wlname->%s: %s\n", wl->name, wl->ws.active? "Lockname" :"UNlockname" );
+		}
+	}
+
+	return 0;
+}
+#else
+ssize_t pm_show_All_wakelocks( void )
+{
+	return 0;
+}
+#endif
+
 ssize_t pm_show_wakelocks(char *buf, bool show_active)
 {
 	struct rb_node *node;

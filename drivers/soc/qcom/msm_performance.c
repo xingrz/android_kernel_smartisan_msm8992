@@ -1582,12 +1582,12 @@ static int __ref rm_high_pwr_cost_cpus(struct cluster *cl)
 		if (!cpu_online(max_cost_cpu))
 			goto end;
 
-		pr_debug("msm_perf: Offlining CPU%d Power:%d\n", max_cost_cpu,
+		printk(KERN_ERR "msm_perf: Offlining CPU%d Power:%d\n", max_cost_cpu,
 								max_cost);
 		cpumask_set_cpu(max_cost_cpu, cl->offlined_cpus);
 		if (cpu_down(max_cost_cpu)) {
 			cpumask_clear_cpu(max_cost_cpu, cl->offlined_cpus);
-			pr_debug("msm_perf: Offlining CPU%d failed\n",
+			printk(KERN_ERR "msm_perf: Offlining CPU%d failed\n",
 								max_cost_cpu);
 		}
 
@@ -1734,7 +1734,7 @@ static int __ref msm_performance_cpu_callback(struct notifier_block *nfb,
 			return NOTIFY_OK;
 		if (i_cl->max_cpu_request <=
 					num_online_managed(i_cl->cpus)) {
-			pr_debug("msm_perf: Prevent CPU%d onlining\n", cpu);
+			printk(KERN_ERR "msm_perf: Prevent CPU%d onlining\n", cpu);
 			cpumask_set_cpu(cpu, i_cl->offlined_cpus);
 			return NOTIFY_BAD;
 		}

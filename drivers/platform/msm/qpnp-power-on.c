@@ -56,6 +56,7 @@
 #define QPNP_PON_WARM_RESET_REASON1(base)	(base + 0xA)
 #define QPNP_PON_WARM_RESET_REASON2(base)	(base + 0xB)
 #define QPNP_POFF_REASON1(base)			(base + 0xC)
+#define QPNP_POFF_REASON2(base)			(base + 0xD)
 #define QPNP_PON_KPDPWR_S1_TIMER(base)		(base + 0x40)
 #define QPNP_PON_KPDPWR_S2_TIMER(base)		(base + 0x41)
 #define QPNP_PON_KPDPWR_S2_CNTL(base)		(base + 0x42)
@@ -216,9 +217,9 @@ static const char * const qpnp_poff_reason[] = {
 	[7] = "Triggered from KPDPWR_N (Long Power Key hold)",
 	[8] = "N/A",
 	[9] = "N/A",
-	[10] = "N/A",
+	[10] = "N/A or Triggered from AVDD_RB",        /**0x80d reg  include different value in the pm8994 doc**/
 	[11] = "Triggered from CHARGER (Charger ENUM_TIMER, BOOT_DONE)",
-	[12] = "Triggered from TFT (Thermal Fault Tolerance)",
+	[12] = "Triggered from TFT (Thermal Fault Tolerance) or AFB ",
 	[13] = "Triggered from UVLO (Under Voltage Lock Out)",
 	[14] = "Triggered from OTST3 (Overtemp)",
 	[15] = "Triggered from STAGE3 (Stage 3 reset)",
@@ -1757,6 +1758,10 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 		return rc;
 	}
 
+	dev_info(&pon->spmi->dev,
+		"PMIC@SID%d Power-on reason 0x808:'%#x'\n", pon->spmi->sid, pon_sts);
+
+	boot_reason = ffs(pon_sts);
 
 	index = ffs(pon_sts) - 1;
 	cold_boot = !qpnp_pon_is_warm_reset();
@@ -1781,8 +1786,14 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 			rc);
 		return rc;
 	}
+
 	poff_sts = buf[0] | (buf[1] << 8);
+
+	dev_info(&pon->spmi->dev,
+		"PMIC@SID%d Power-off reason 0x80c:'%#x'\n", pon->spmi->sid, poff_sts);
+
 	index = ffs(poff_sts) - 1;
+
 	if (index >= ARRAY_SIZE(qpnp_poff_reason) || index < 0) {
 		dev_info(&pon->spmi->dev,
 				"PMIC@SID%d: Unknown power-off reason\n",
@@ -1791,6 +1802,36 @@ static int qpnp_pon_probe(struct spmi_device *spmi)
 		pon->pon_power_off_reason = index;
 		dev_info(&pon->spmi->dev,
 				"PMIC@SID%d: Power-off reason: %s\n",
+				pon->spmi->sid,
+				qpnp_poff_reason[index]);
+	}
+
+        /** POFF reason regieset2 **/
+	rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid,
+				QPNP_POFF_REASON2(pon->base),
+				buf, 2);
+
+	if (rc) {
+		dev_err(&pon->spmi->dev, "Unable to read POFF_RESASON2 regs rc:%d\n",
+			rc);
+		return rc;
+	}
+
+	poff_sts = buf[0] | (buf[1] << 8);
+
+	dev_err(&pon->spmi->dev,
+		"PMIC@SID Power-reason regiest%d Power-off reason 0x80D:'%#x'\n", pon->spmi->sid, poff_sts);
+
+	index = ffs(poff_sts) + 8 - 1;  /*offse equal 8*/
+
+	if (index >= ARRAY_SIZE(qpnp_poff_reason) || index < 10) {
+		dev_info(&pon->spmi->dev,
+				"PMIC@SID Power-reason regiest%d: Unknown power-off reason\n",
+				pon->spmi->sid);
+	} else {
+		pon->pon_power_off_reason = index;
+		dev_info(&pon->spmi->dev,
+				"PMIC@SID Power-reason regiest%d: Power-off reason : %s\n",
 				pon->spmi->sid,
 				qpnp_poff_reason[index]);
 	}

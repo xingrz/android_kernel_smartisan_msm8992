@@ -121,8 +121,8 @@ static int fb_event_callback(struct notifier_block *self,
 	struct msm_fb_data_type *mfd;
 
 	if (!evdata) {
-		pr_err("%s: event data not available\n", __func__);
-		return NOTIFY_BAD;
+		pr_debug("%s: event data not available\n", __func__);
+		return 0;
 	}
 
 	mfd = evdata->info->par;

@@ -248,6 +248,7 @@ static void __dump_mixer(struct seq_file *s, struct mdss_mdp_mixer *mixer)
 	seq_printf(s, "\nTotal pipes=%d\n", cnt);
 }
 
+#ifdef CONFIG_DEBUG_FS
 static void __dump_buf_data(struct seq_file *s, struct msm_fb_data_type *mfd)
 {
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
@@ -282,6 +283,7 @@ static void __dump_buf_data(struct seq_file *s, struct msm_fb_data_type *mfd)
 	}
 	mutex_unlock(&mdp5_data->list_lock);
 }
+#endif
 
 static void __dump_ctl(struct seq_file *s, struct mdss_mdp_ctl *ctl)
 {
@@ -333,6 +335,7 @@ static int __dump_mdp(struct seq_file *s, struct mdss_data_type *mdata)
 	return 0;
 }
 
+#ifdef CONFIG_DEBUG_FS
 static int __dump_buffers(struct seq_file *s, struct mdss_data_type *mdata)
 {
 	struct mdss_mdp_ctl *ctl;
@@ -351,6 +354,7 @@ static int __dump_buffers(struct seq_file *s, struct mdss_data_type *mdata)
 	}
 	return 0;
 }
+#endif
 
 #define DUMP_CHUNK 256
 #define DUMP_SIZE SZ_32K

@@ -533,12 +533,18 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_camera_i2c_client *sensor_i2c_client;
 	struct msm_camera_slave_info *slave_info;
 	const char *sensor_name;
+	struct msm_camera_power_ctrl_t *ctrl;
+	unsigned gpio_num;
+	int vendor_id = 0;
 
 	if (!s_ctrl) {
 		pr_err("%s:%d failed: %p\n",
 			__func__, __LINE__, s_ctrl);
 		return -EINVAL;
 	}
+	
+	ctrl = &s_ctrl->sensordata->power_info;
+ 
 	sensor_i2c_client = s_ctrl->sensor_i2c_client;
 	slave_info = s_ctrl->sensordata->slave_info;
 	sensor_name = s_ctrl->sensordata->sensor_name;
@@ -563,6 +569,21 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 	if (msm_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
 		pr_err("msm_sensor_match_id chip id doesnot match\n");
 		return -ENODEV;
+	}
+	gpio_num = ctrl->gpio_conf->gpio_num_info->gpio_num
+                                [SENSOR_GPIO_CUSTOM1];
+
+	pr_err("%s: CUSTOM1 gpio: 0x%x\n", __func__, gpio_num);
+
+	vendor_id = gpio_get_value_cansleep(gpio_num);
+	
+	pr_err("%s: read vendor id: 0x%x expected id 0x%x:\n", __func__, vendor_id,
+		slave_info->vendor_id);
+
+	if (vendor_id != slave_info->vendor_id) {
+		pr_err("vendor id doesnot match\n");
+		return -ENODEV;
+
 	}
 	return rc;
 }
@@ -1294,7 +1315,7 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 				break;
 			}
 			s_ctrl->sensor_state = MSM_SENSOR_POWER_UP;
-			CDBG("%s:%d sensor state %d\n", __func__, __LINE__,
+			pr_err("%s:%d sensor state %d\n", __func__, __LINE__,
 				s_ctrl->sensor_state);
 		} else {
 			rc = -EFAULT;
@@ -1321,7 +1342,7 @@ int msm_sensor_config(struct msm_sensor_ctrl_t *s_ctrl, void __user *argp)
 				break;
 			}
 			s_ctrl->sensor_state = MSM_SENSOR_POWER_DOWN;
-			CDBG("%s:%d sensor state %d\n", __func__, __LINE__,
+			pr_err("%s:%d sensor state %d\n", __func__, __LINE__,
 				s_ctrl->sensor_state);
 		} else {
 			rc = -EFAULT;

@@ -64,6 +64,7 @@ static char *ipa_mhi_state_str[] = {
 		ipa_mhi_state_str[(state)] : \
 		"INVALID")
 
+#ifdef CONFIG_DEBUG_FS
 static char *ipa_mhi_channel_state_str[] = {
 	__stringify(IPA_HW_MHI_CHANNEL_STATE_DISABLE),
 	__stringify(IPA_HW_MHI_CHANNEL_STATE_ENABLE),
@@ -72,6 +73,7 @@ static char *ipa_mhi_channel_state_str[] = {
 	__stringify(IPA_HW_MHI_CHANNEL_STATE_STOP),
 	__stringify(IPA_HW_MHI_CHANNEL_STATE_ERROR),
 };
+#endif
 
 #define MHI_CH_STATE_STR(state) \
 	(((state) >= 0 && (state) <= IPA_HW_MHI_CHANNEL_STATE_ERROR) ? \

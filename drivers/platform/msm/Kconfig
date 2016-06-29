@@ -264,4 +264,9 @@ config SEEMP_CORE
 	help
 		This option enables malware protection component
 		to log on-device software API activity.
+
+config SMARTISAN_MSM8992_DEBUG
+	tristate "Smartisan Icesky DEBUG CONTROL"
+	help
+		Support Smartisan Icesky product debug message
 endmenu

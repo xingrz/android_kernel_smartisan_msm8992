@@ -1867,11 +1867,30 @@ static struct wcd9xxx_pdata *wcd9xxx_populate_dt_pdata(struct device *dev)
 				"qcom,cdc-reset-gpio", 0);
 	if (pdata->reset_gpio < 0) {
 		dev_err(dev, "Looking up %s property in node %s failed %d\n",
-			"qcom, cdc-reset-gpio", dev->of_node->full_name,
+			"qcom,cdc-reset-gpio", dev->of_node->full_name,
 			pdata->reset_gpio);
 		goto err;
 	}
 	dev_dbg(dev, "%s: reset gpio %d", __func__, pdata->reset_gpio);
+	pdata->external_pa_switch = of_get_named_gpio(dev->of_node,
+				"qcom,external-pa-switch", 0);
+	if (pdata->external_pa_switch < 0) {
+		dev_err(dev, "Looking up %s property in node %s failed %d\n",
+			"qcom,external-pa-switch", dev->of_node->full_name,
+			pdata->external_pa_switch);
+		goto err;
+	}
+	dev_dbg(dev, "%s: external pa switch gpio %d", __func__, pdata->external_pa_switch);
+	pdata->external_pa_en = of_get_named_gpio(dev->of_node,
+				"qcom,external-pa-enable", 0);
+	if (pdata->external_pa_en < 0) {
+		dev_err(dev, "Looking up %s property in node %s failed %d\n",
+			"qcom,externel-pa-enable", dev->of_node->full_name,
+			pdata->external_pa_en);
+		goto err;
+	}
+	dev_dbg(dev, "%s: external pa enable gpio %d", __func__, pdata->external_pa_en);
+
 	ret = of_property_read_u32(dev->of_node,
 				   "qcom,cdc-mclk-clk-rate",
 				   &mclk_rate);

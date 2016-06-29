@@ -43,6 +43,7 @@
 #define SCM_EDLOAD_MODE			0X01
 #define SCM_DLOAD_CMD			0x10
 
+#define EDL_KERNEL_MODE  1
 
 static int restart_mode;
 void *restart_reason;
@@ -104,6 +105,12 @@ static void set_dload_mode(int on)
 {
 	int ret;
 
+	if (on == 2) {
+		__raw_writel(2, dload_mode_addr + sizeof(unsigned int) * 3);
+	} else if (on == 3) {
+		__raw_writel(0, dload_mode_addr + sizeof(unsigned int) * 3);
+	}
+
 	if (dload_mode_addr) {
 		__raw_writel(on ? 0xE47B337D : 0, dload_mode_addr);
 		__raw_writel(on ? 0xCE14091A : 0,
@@ -151,20 +158,14 @@ static void enable_emergency_dload_mode(void)
 static int dload_set(const char *val, struct kernel_param *kp)
 {
 	int ret;
-	int old_val = download_mode;
 
 	ret = param_set_int(val, kp);
 
 	if (ret)
 		return ret;
 
-	/* If download_mode is not zero or one, ignore. */
-	if (download_mode >> 1) {
-		download_mode = old_val;
-		return -EINVAL;
-	}
-
 	set_dload_mode(download_mode);
+	download_mode = !!download_mode;
 
 	return 0;
 }
@@ -270,6 +271,11 @@ static void msm_restart_prepare(const char *cmd)
 				__raw_writel(0x6f656d00 | (code & 0xff),
 					     restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
+#ifndef _BUILD_MOL
+			enable_emergency_dload_mode();
+#endif
+		} else if (!strncmp(cmd, "smartisan_edl", 13)) {
+			/* step into edl mode from LK */
 			enable_emergency_dload_mode();
 		} else {
 			__raw_writel(0x77665501, restart_reason);
@@ -318,7 +324,7 @@ static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 		.arginfo = SCM_ARGS(2),
 	};
 
-	pr_notice("Going down for restart now\n");
+	pr_err("Going down for restart now, cmd=%s\n", cmd);
 
 	msm_restart_prepare(cmd);
 
@@ -347,7 +353,31 @@ static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 
 	mdelay(10000);
 }
+#ifdef EDL_KERNEL_MODE
+static bool is_step_edl_mode = false;
 
+static int __init step_into_edl(void)
+{
+	if (is_step_edl_mode == true) {
+		pr_err("[%s]: step_into_edl\n", __func__);
+		do_msm_restart(REBOOT_WARM, "smartisan_edl");
+	} else {
+		/* do nothing */
+		pr_err("[%s]: do nothing\n", __func__);
+	}
+
+	return 1;
+}
+late_initcall(step_into_edl);
+
+static int edl_setup(char *str)
+{
+	is_step_edl_mode = ((*str)=='1') ? true : false;
+
+	return 1;
+}
+__setup("edl_dload=", edl_setup);
+#endif
 static void do_msm_poweroff(void)
 {
 	int ret;

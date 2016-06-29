@@ -346,6 +346,7 @@ static int ramp_up_first_cpu(int cpu, int saved_rate)
 	return rc;
 }
 
+extern  void power_debug_collapse(void);
 static bool msm_pm_power_collapse(bool from_idle)
 {
 	unsigned int cpu = smp_processor_id();
@@ -369,6 +370,7 @@ static bool msm_pm_power_collapse(bool from_idle)
 			|| (MSM_PM_DEBUG_IDLE_CLK & msm_pm_debug_mask))
 		clock_debug_print_enabled();
 
+       power_debug_collapse();
 	avsdscr = avs_get_avsdscr();
 	avscsr = avs_get_avscsr();
 	avs_set_avscsr(0); /* Disable AVS */

@@ -552,7 +552,9 @@ module_param_named(debug_mask, msm_pcie_debug_mask,
 
 /* debugfs values */
 static u32 rc_sel;
+#ifdef CONFIG_DEBUG_FS
 static u32 rc_sel_max;
+#endif
 static u32 base_sel;
 static u32 wr_offset;
 static u32 wr_mask;
@@ -2130,6 +2132,17 @@ static inline int msm_pcie_is_link_up(struct msm_pcie_dev_t *dev)
 			PCIE20_CAP_LINKCTRLSTATUS) & BIT(29);
 }
 
+bool msm_pcie_link_is_ready(u32 rc_idx)
+{
+	struct msm_pcie_dev_t *dev = &msm_pcie_dev[rc_idx];
+
+	if (dev->link_status != MSM_PCIE_LINK_ENABLED)
+		return false;
+	else
+		return true;
+}
+EXPORT_SYMBOL(msm_pcie_link_is_ready);
+
 /**
  * msm_pcie_iatu_config - configure outbound address translation region
  * @dev: root commpex
@@ -3385,6 +3398,7 @@ int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 
 	msm_pcie_config_link_state(dev);
 
+	PCIE_INFO(dev, "PCIe RC%d set link_status ENABLED\n", dev->rc_idx);
 	dev->link_status = MSM_PCIE_LINK_ENABLED;
 	dev->power_on = true;
 	dev->suspending = false;
@@ -3418,6 +3432,7 @@ void msm_pcie_disable(struct msm_pcie_dev_t *dev, u32 options)
 		return;
 	}
 
+	PCIE_INFO(dev, "PCIe RC%d set link_status DISABLED\n", dev->rc_idx);
 	dev->link_status = MSM_PCIE_LINK_DISABLED;
 	dev->power_on = false;
 	dev->link_turned_off_counter++;
@@ -4078,6 +4093,7 @@ static irqreturn_t handle_linkdown_irq(int irq, void *data)
 			"PCIe:the link of RC%d is suspending.\n",
 			dev->rc_idx);
 	} else {
+		PCIE_DBG(dev, "PCIe RC%d set link_status DISABLED\n", dev->rc_idx);
 		dev->link_status = MSM_PCIE_LINK_DISABLED;
 		dev->shadow_en = false;
 

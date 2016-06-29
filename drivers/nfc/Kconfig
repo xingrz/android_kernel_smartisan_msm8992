@@ -49,3 +49,15 @@ config NFC_QNCI
 	  This enables the NFC driver for QCA199x based devices.
 	  This is for i2c connected version. NCI protocol logic
 	  resides in the usermode and it has no other NFC dependencies.
+
+config BCM2079X_NFC
+	  tristate "BCM2079X NFC driver"
+	  depends on I2C
+	  select CRC_CCITT
+	  default n
+	  ---help---
+	  Say yes if you want BCM2079X Near Field Communication driver.
+	  This is for i2c connected version. If unsure, say N here.
+	  To compile this driver as a module, choose m here. The module will
+	  be called bcm2079x.
+

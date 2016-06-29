@@ -1069,9 +1069,8 @@ static void apps_ipa_packet_receive_notify(void *priv,
 	struct sk_buff *skb = (struct sk_buff *)data;
 	struct net_device *dev = (struct net_device *)priv;
 	int result;
-	unsigned int packet_len = skb->len;
 
-	IPAWANDBG("Rx packet was received");
+	IPAWANDBG("Tx packet was received");
 	if (evt != IPA_RECEIVE) {
 		IPAWANERR("A none IPA_RECEIVE event in wan_ipa_receive\n");
 		return;
@@ -1087,7 +1086,7 @@ static void apps_ipa_packet_receive_notify(void *priv,
 		dev->stats.rx_dropped++;
 	}
 	dev->stats.rx_packets++;
-	dev->stats.rx_bytes += packet_len;
+	dev->stats.rx_bytes += skb->len;
 	return;
 }
 
@@ -2344,22 +2343,9 @@ void ipa_broadcast_quota_reach_ind(u32 mux_id)
  */
 void ipa_q6_handshake_complete(bool ssr_bootup)
 {
-	if (ssr_bootup) {
-		/*
-		 * In case the uC is required to be loaded by the Modem,
-		 * the proxy vote will be removed only when uC loading is
-		 * complete and indication is received by the AP. After SSR,
-		 * uC is already loaded. Therefore, proxy vote can be removed
-		 * once Modem init is complete.
-		 */
-		ipa_proxy_clk_unvote();
-
-		/*
-		 * It is required to recover the network stats after
-		 * SSR recovery
-		 */
+	/* It is required to recover the network stats after SSR recovery */
+	if (ssr_bootup)
 		rmnet_ipa_get_network_stats_and_update();
-	}
 }
 
 static int __init ipa_wwan_init(void)

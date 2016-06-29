@@ -612,10 +612,19 @@ static int msm_tlmm_ebi_cfg(uint pin_no, unsigned long *config,
 	return 0;
 }
 
+void __iomem *   GPIOMAPBASE;
 static void msm_tlmm_set_reg_base(void __iomem *tlmm_base,
 				  struct msm_pintype_info *pinfo)
 {
 	pinfo->reg_base = tlmm_base + pinfo->pintype_data->reg_base_offset;
+	printk(" reg_base=0x%p , name =%s \n", pinfo->reg_base, pinfo->name );
+
+	if(strncmp("gp",pinfo->name,2)==0)
+	{
+		//printk("%s: tlmm_base=0x%p, reg_base_offset=0x%x\n", __func__, tlmm_base, ( unsigned int )(pinfo->pintype_data->reg_base_offset)  );
+		//printk(" reg_base=0x%p \n", pinfo->reg_base );
+		GPIOMAPBASE=pinfo->reg_base;
+	}
 }
 
 static void msm_tlmm_gp_fn(uint pin_no, u32 func, bool enable,
@@ -644,6 +653,7 @@ static void msm_tlmm_gp_set(struct gpio_chip *gc, unsigned offset, int val)
 	struct msm_pintype_info *pinfo = gc_to_pintype(gc);
 	void __iomem *inout_reg = TLMM_GP_INOUT(pinfo, offset);
 
+	//printk( " %s,  offset=%d, inout_reg=%p \n ", __func__, offset ,  inout_reg );
 	writel_relaxed(val ? BIT(GPIO_OUT_BIT) : 0, inout_reg);
 }
 

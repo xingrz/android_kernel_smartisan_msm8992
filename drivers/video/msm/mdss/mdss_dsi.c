@@ -31,10 +31,78 @@
 
 #define XO_CLK_RATE	19200000
 
+#ifdef CONFIG_ICESKY_PANEL
+static int panel_id_gpio;
+#endif
+
 static struct dsi_drv_cm_data shared_ctrl_data;
 
 static int mdss_dsi_pinctrl_set_state(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 					bool active);
+
+int msm_panel_enable_vreg(struct dss_vreg *in_vreg, int num_vreg, int enable)
+{
+	int i = 0, rc = 0;
+
+	if (enable) {
+		for (i = 0; i < num_vreg; i++) {
+			rc = PTR_RET(in_vreg[i].vreg);
+			if (rc) {
+				DEV_ERR("%pS->%s: %s regulator error. rc=%d\n",
+					__builtin_return_address(0), __func__,
+					in_vreg[i].vreg_name, rc);
+				goto vreg_set_opt_mode_fail;
+			}
+			if (in_vreg[i].pre_on_sleep)
+				mdelay(in_vreg[i].pre_on_sleep);
+			rc = regulator_set_optimum_mode(in_vreg[i].vreg,
+				in_vreg[i].enable_load);
+			if (rc < 0) {
+				DEV_ERR("%pS->%s: %s set opt m fail\n",
+					__builtin_return_address(0), __func__,
+					in_vreg[i].vreg_name);
+				goto vreg_set_opt_mode_fail;
+			}
+			rc = regulator_enable(in_vreg[i].vreg);
+			if (in_vreg[i].post_on_sleep)
+				mdelay(in_vreg[i].post_on_sleep);
+			if (rc < 0) {
+				DEV_ERR("%pS->%s: %s enable failed\n",
+					__builtin_return_address(0), __func__,
+					in_vreg[i].vreg_name);
+				goto disable_vreg;
+			}
+		}
+	} else {
+		for (i = num_vreg-1; i >= 0; i--)
+			if (regulator_is_enabled(in_vreg[i].vreg)) {
+				if (in_vreg[i].pre_off_sleep)
+					mdelay(in_vreg[i].pre_off_sleep);
+				regulator_set_optimum_mode(in_vreg[i].vreg,
+					in_vreg[i].disable_load);
+				regulator_disable(in_vreg[i].vreg);
+				if (in_vreg[i].post_off_sleep)
+					mdelay(in_vreg[i].post_off_sleep);
+			}
+	}
+	return rc;
+
+disable_vreg:
+	regulator_set_optimum_mode(in_vreg[i].vreg, in_vreg[i].disable_load);
+
+vreg_set_opt_mode_fail:
+	for (i--; i >= 0; i--) {
+		if (in_vreg[i].pre_off_sleep)
+			mdelay(in_vreg[i].pre_off_sleep);
+		regulator_set_optimum_mode(in_vreg[i].vreg,
+			in_vreg[i].disable_load);
+		regulator_disable(in_vreg[i].vreg);
+		if (in_vreg[i].post_off_sleep)
+			mdelay(in_vreg[i].post_off_sleep);
+	}
+
+	return rc;
+} /* msm_panel_enable_vreg */
 
 static int mdss_dsi_labibb_vreg_init(struct platform_device *pdev)
 {
@@ -105,7 +173,9 @@ static int mdss_dsi_labibb_vreg_ctrl(struct mdss_dsi_ctrl_pdata *ctrl,
 							__func__);
 			return rc;
 		}
-
+#ifdef CONFIG_ICESKY_PANEL
+		mdelay(2);
+#endif
 		rc = regulator_disable(ctrl->ibb);
 		if (rc) {
 			pr_err("%s: disable failed for ibb regulator\n",
@@ -155,6 +225,8 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	int i = 0;
 
+	pr_info("%s\n", __func__);
+
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
 		ret = -EINVAL;
@@ -164,11 +236,13 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+#ifndef CONFIG_ICESKY_PANEL
 	ret = mdss_dsi_panel_reset(pdata, 0);
 	if (ret) {
 		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
 		ret = 0;
 	}
+#endif
 
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
@@ -182,6 +256,14 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		udelay(2000);
 	}
 
+#ifdef CONFIG_ICESKY_PANEL
+	ret = mdss_dsi_panel_reset(pdata, 0);
+	if (ret) {
+		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+		ret = 0;
+	}
+#endif
+
 	for (i = DSI_MAX_PM - 1; i >= 0; i--) {
 		/*
 		 * Core power module will be disabled when the
@@ -189,7 +271,7 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		 */
 		if (DSI_CORE_PM == i)
 			continue;
-		ret = msm_dss_enable_vreg(
+		ret = msm_panel_enable_vreg(
 			ctrl_pdata->power_data[i].vreg_config,
 			ctrl_pdata->power_data[i].num_vreg, 0);
 		if (ret)
@@ -207,6 +289,8 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 	int i = 0;
 
+	pr_info("%s\n", __func__);
+
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
@@ -222,7 +306,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		 */
 		if (DSI_CORE_PM == i)
 			continue;
-		ret = msm_dss_enable_vreg(
+		ret = msm_panel_enable_vreg(
 			ctrl_pdata->power_data[i].vreg_config,
 			ctrl_pdata->power_data[i].num_vreg, 1);
 		if (ret) {
@@ -237,7 +321,11 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		if (mdss_dsi_labibb_vreg_ctrl(ctrl_pdata, true))
 			pr_err("Unable to configure bias vreg\n");
 		/* Add delay recommended by panel specs */
+#ifndef CONFIG_ICESKY_PANEL
 		udelay(2000);
+#else
+		mdelay(10);
+#endif
 	}
 
 	i--;
@@ -262,7 +350,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 error:
 	if (ret) {
 		for (; i >= 0; i--)
-			msm_dss_enable_vreg(
+			msm_panel_enable_vreg(
 				ctrl_pdata->power_data[i].vreg_config,
 				ctrl_pdata->power_data[i].num_vreg, 0);
 	}
@@ -1453,6 +1541,7 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		ctrl_pdata->refresh_clk_rate = true;
 		break;
 	case MDSS_EVENT_LINK_READY:
+		fb_notifier_call_chain(LCD_EVENT_ON_START, NULL);
 		rc = mdss_dsi_on(pdata);
 		mdss_dsi_op_mode_config(pdata->panel_info.mipi.mode,
 							pdata);
@@ -1470,8 +1559,10 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
 			rc = mdss_dsi_unblank(pdata);
 		pdata->panel_info.esd_rdy = true;
+		fb_notifier_call_chain(LCD_EVENT_ON_END, NULL);
 		break;
 	case MDSS_EVENT_BLANK:
+		fb_notifier_call_chain(LCD_EVENT_OFF_START, NULL);
 		power_state = (int) (unsigned long) arg;
 		if (ctrl_pdata->off_cmds.link_state == DSI_HS_MODE)
 			rc = mdss_dsi_blank(pdata, power_state);
@@ -1483,6 +1574,7 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_blank(pdata, power_state);
 		rc = mdss_dsi_off(pdata, power_state);
+		fb_notifier_call_chain(LCD_EVENT_OFF_END, NULL);
 		break;
 	case MDSS_EVENT_CONT_SPLASH_FINISH:
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
@@ -1557,8 +1649,25 @@ static struct device_node *mdss_dsi_pref_prim_panel(
 
 	pr_debug("%s:%d: Select primary panel from dt\n",
 					__func__, __LINE__);
-	dsi_pan_node = of_parse_phandle(pdev->dev.of_node,
-					"qcom,dsi-pref-prim-pan", 0);
+#ifdef CONFIG_ICESKY_PANEL
+       panel_id_gpio = of_get_named_gpio(pdev->dev.of_node,
+                        "qcom,dsi-panel-id-gpio", 0);
+       if (gpio_is_valid(panel_id_gpio))
+       {
+               if(gpio_get_value(panel_id_gpio))
+                       dsi_pan_node = of_parse_phandle(pdev->dev.of_node,
+                                       "qcom,dsi-pref-second-pan", 0);
+               else
+                       dsi_pan_node = of_parse_phandle(pdev->dev.of_node,
+                                        "qcom,dsi-pref-prim-pan", 0);
+       }else
+               dsi_pan_node = of_parse_phandle(pdev->dev.of_node,
+                               "qcom,dsi-pref-second-pan", 0);
+#else
+       dsi_pan_node = of_parse_phandle(pdev->dev.of_node,
+                       "qcom,dsi-pref-prim-pan", 0);
+#endif
+
 	if (!dsi_pan_node)
 		pr_err("%s:can't find panel phandle\n", __func__);
 
@@ -1653,6 +1762,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	bool cmd_cfg_cont_splash = true;
 	struct mdss_panel_cfg *pan_cfg = NULL;
 	struct mdss_util_intf *util;
+	struct dss_vreg vreg_config_temp;
 
 	util = mdss_get_util_intf();
 	if (util == NULL) {
@@ -1760,6 +1870,24 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	if (!dsi_pan_node) {
 		pr_err("%s: can't find panel node %s\n", __func__, panel_cfg);
 		goto error_pan_node;
+	}
+
+	if ((panel_id_gpio != 0) && (gpio_is_valid(panel_id_gpio)))
+	{
+		if (gpio_get_value(panel_id_gpio))  //sharp panel
+		{
+			if (ctrl_pdata->power_data[DSI_PANEL_PM].num_vreg > 1)
+			{
+				vreg_config_temp = ctrl_pdata->power_data[DSI_PANEL_PM].vreg_config[0];
+				ctrl_pdata->power_data[DSI_PANEL_PM].vreg_config[0] = ctrl_pdata->power_data[DSI_PANEL_PM].vreg_config[1];
+				ctrl_pdata->power_data[DSI_PANEL_PM].vreg_config[1] = vreg_config_temp;
+
+				ctrl_pdata->power_data[DSI_PANEL_PM].vreg_config[0].post_on_sleep = 1;
+				ctrl_pdata->power_data[DSI_PANEL_PM].vreg_config[1].post_on_sleep = 10;
+				ctrl_pdata->power_data[DSI_PANEL_PM].vreg_config[1].min_voltage = 3300000;
+				ctrl_pdata->power_data[DSI_PANEL_PM].vreg_config[1].max_voltage = 3300000;
+			}
+		}
 	}
 
 	cmd_cfg_cont_splash = mdss_panel_get_boot_cfg() ? true : false;
@@ -2169,7 +2297,7 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	 * suspend also.
 	 */
 	if (pinfo->ulps_suspend_enabled) {
-		rc = msm_dss_enable_vreg(
+		rc = msm_panel_enable_vreg(
 			ctrl_pdata->power_data[DSI_CTRL_PM].vreg_config,
 			ctrl_pdata->power_data[DSI_CTRL_PM].num_vreg, 1);
 		if (rc) {

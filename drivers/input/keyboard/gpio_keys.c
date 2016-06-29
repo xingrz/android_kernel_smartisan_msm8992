@@ -495,6 +495,14 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 		irqflags = 0;
 	}
 
+	/* don't send dummy release event when system resumes
+	 * otherwise gpio_keys_resume-->gpio_keys_report_state will be called when resume,
+	 * gpio-keys will be report many times, getevent have confused.
+	 *
+	 * input-dev's dev_pm_ops'resume will ignore the keys that have been pressed at suspend time
+	 * and gpio_keys_resume-->gpio_keys_report_state by set INPUT_PROP_NO_DUMMY_RELEASE*/
+	__set_bit(INPUT_PROP_NO_DUMMY_RELEASE, input->propbit);
+
 	input_set_capability(input, button->type ?: EV_KEY, button->code);
 
 	/*
