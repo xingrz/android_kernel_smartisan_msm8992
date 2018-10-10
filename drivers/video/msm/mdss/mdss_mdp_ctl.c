@@ -2618,6 +2618,11 @@ static int mdss_mdp_ctl_start_sub(struct mdss_mdp_ctl *ctl, bool handoff)
 	writel_relaxed(temp, ctl->mdata->mdp_base +
 		MDSS_MDP_REG_DISP_INTF_SEL);
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	writel_relaxed(0x02000, ctl->mdata->mdp_base +
+		MDSS_MDP_REG_VSYNC_SEL);
+#endif
+
 	outsize = (mixer->height << 16) | mixer->width;
 	mdp_mixer_write(mixer, MDSS_MDP_REG_LM_OUT_SIZE, outsize);
 

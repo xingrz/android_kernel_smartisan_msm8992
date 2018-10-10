@@ -72,6 +72,10 @@
 
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
+#ifdef CONFIG_VENDOR_SMARTISAN
+static int blank_forbid;
+static int unblank_count;
+#endif
 
 static u32 mdss_fb_pseudo_palette[16] = {
 	0x00000000, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -79,6 +83,16 @@ static u32 mdss_fb_pseudo_palette[16] = {
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff
 };
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+static u32 gamma_luminance[] = {
+	0,    30,   64,   104,  148,  197,  247,  300,
+	353,  455,  558,  660,  763,  945,  1052, 1195,
+	1344, 1488, 1586, 1682, 1779, 1899, 2020, 2141,
+	2302, 2464, 2628, 2861, 3100, 3340, 3610, 3888,
+	4095
+};
+#endif
 
 static struct msm_mdp_interface *mdp_instance;
 
@@ -246,6 +260,9 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 {
 	struct msm_fb_data_type *mfd = dev_get_drvdata(led_cdev->dev->parent);
 	int bl_lvl;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int temp;
+#endif
 
 	if (mfd->boot_notification_led) {
 		led_trigger_event(mfd->boot_notification_led, 0);
@@ -255,6 +272,11 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 	if (value > mfd->panel_info->brightness_max)
 		value = mfd->panel_info->brightness_max;
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if ((value > 0) && (value < 8))
+		value = 8;
+#endif
+
 	/* This maps android backlight level 0 to 255 into
 	   driver backlight level 0 to bl_max with rounding */
 	MDSS_BRIGHT_TO_BL(bl_lvl, value, mfd->panel_info->bl_max,
@@ -262,6 +284,14 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 
 	if (!bl_lvl && value)
 		bl_lvl = 1;
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	temp = value / 8;
+	if (value < 255)
+		bl_lvl = gamma_luminance[temp] + (gamma_luminance[temp+1] - gamma_luminance[temp]) * (value % 8) / 8;
+	else
+		bl_lvl = 4095;
+#endif
 
 	if (!IS_CALIB_MODE_BL(mfd) && (!mfd->ext_bl_ctrl || !value ||
 							!mfd->bl_level)) {
@@ -564,6 +594,21 @@ static ssize_t mdss_fb_get_panel_info(struct device *dev,
 	return ret;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static ssize_t mdss_fb_get_panel_vendor(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_panel_info *pinfo = mfd->panel_info;
+	int ret;
+
+	ret = scnprintf(buf, PAGE_SIZE, "%s\n", pinfo->panel_name);
+
+	return ret;
+}
+#endif
+
 static ssize_t mdss_fb_get_panel_status(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -727,6 +772,30 @@ static ssize_t mdss_fb_change_dfps_mode(struct device *dev,
 	return len;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static ssize_t mdss_fb_blank_forbid(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t len)
+{
+	if (sscanf(buf, "%d", &blank_forbid) != 1) {
+		pr_err("sccanf buf error!\n");
+	}
+	if (blank_forbid == 0)
+		unblank_count = 0;
+
+	return len;
+}
+
+static ssize_t mdss_fb_unblank_count(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret = 0;
+
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", unblank_count);
+
+	return ret;
+}
+#endif
+
 static ssize_t mdss_fb_get_dfps_mode(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -765,6 +834,10 @@ static DEVICE_ATTR(msm_fb_panel_status, S_IRUGO | S_IWUSR,
 	mdss_fb_get_panel_status, mdss_fb_force_panel_dead);
 static DEVICE_ATTR(msm_fb_dfps_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_dfps_mode, mdss_fb_change_dfps_mode);
+#ifdef CONFIG_VENDOR_SMARTISAN
+static DEVICE_ATTR(set_blank_mux, S_IRUGO | S_IWUGO, mdss_fb_unblank_count, mdss_fb_blank_forbid);
+static DEVICE_ATTR(msm_fb_panel_vendor, S_IRUGO, mdss_fb_get_panel_vendor, NULL);
+#endif
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_split.attr,
@@ -776,6 +849,10 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_thermal_level.attr,
 	&dev_attr_msm_fb_panel_status.attr,
 	&dev_attr_msm_fb_dfps_mode.attr,
+#ifdef CONFIG_VENDOR_SMARTISAN
+	&dev_attr_set_blank_mux.attr,
+	&dev_attr_msm_fb_panel_vendor.attr,
+#endif
 	NULL,
 };
 
@@ -1344,6 +1421,10 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	} else if (mdss_fb_is_power_on(mfd) && mfd->panel_info->panel_dead) {
 		mfd->unset_bl_level = mfd->bl_level;
 	} else {
+#ifdef CONFIG_VENDOR_SMARTISAN
+		if (mfd->bl_level == 0)
+			msleep(25);
+#endif
 		mfd->unset_bl_level = 0;
 	}
 
@@ -1481,6 +1562,13 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 	if (!mfd)
 		return -EINVAL;
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (blank_forbid > 0) {
+		unblank_count = 1;
+		return 0;
+	}
+#endif
+
 	if (!mdss_fb_is_power_on(mfd) || !mfd->mdp.off_fnc)
 		return 0;
 
@@ -1538,6 +1626,11 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 
 	if (!mfd)
 		return -EINVAL;
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (blank_forbid > 0)
+		unblank_count = 2;
+#endif
 
 	if (mfd->panel_info->debugfs_info)
 		mdss_panel_validate_debugfs_info(mfd);
