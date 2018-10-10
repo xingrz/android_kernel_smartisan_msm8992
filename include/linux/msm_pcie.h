@@ -155,4 +155,14 @@ int msm_pcie_shadow_control(struct pci_dev *dev, bool enable);
  */
 int msm_pcie_debug_info(struct pci_dev *dev, u32 option, u32 base,
 			u32 offset, u32 mask, u32 value);
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+/*
+ * msm_pcie_link_is_ready - check PCIe bus link status.
+ * @rc_idx:	RC that Endpoints connect to.
+ *
+ * This function check PCIe bus link status.
+ */
+bool msm_pcie_link_is_ready(u32 rc_idx);
+#endif
 #endif

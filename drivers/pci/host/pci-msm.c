@@ -2137,6 +2137,19 @@ static inline int msm_pcie_is_link_up(struct msm_pcie_dev_t *dev)
 			PCIE20_CAP_LINKCTRLSTATUS) & BIT(29);
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+bool msm_pcie_link_is_ready(u32 rc_idx)
+{
+	struct msm_pcie_dev_t *dev = &msm_pcie_dev[rc_idx];
+
+	if (dev->link_status != MSM_PCIE_LINK_ENABLED)
+		return false;
+	else
+		return true;
+}
+EXPORT_SYMBOL(msm_pcie_link_is_ready);
+#endif
+
 /**
  * msm_pcie_iatu_config - configure outbound address translation region
  * @dev: root commpex
