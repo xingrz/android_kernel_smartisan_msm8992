@@ -35,7 +35,12 @@ struct msm_flash_ctrl_t;
 struct msm_flash_func_t {
 	int32_t (*camera_flash_init)(struct msm_flash_ctrl_t *,
 		struct msm_flash_cfg_data_t *);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int32_t (*camera_flash_release)(struct msm_flash_ctrl_t *,
+		struct msm_flash_cfg_data_t *);
+#else
 	int32_t (*camera_flash_release)(struct msm_flash_ctrl_t *);
+#endif
 	int32_t (*camera_flash_off)(struct msm_flash_ctrl_t *,
 		struct msm_flash_cfg_data_t *);
 	int32_t (*camera_flash_low)(struct msm_flash_ctrl_t *,
