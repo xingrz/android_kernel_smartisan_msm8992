@@ -46,6 +46,10 @@ struct msm_camera_slave_info {
 	uint16_t sensor_id_reg_addr;
 	uint16_t sensor_id;
 	uint16_t sensor_id_mask;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	uint16_t vendor_id;
+	uint16_t vendor_id_mask;
+#endif
 };
 
 struct msm_cam_clk_info {

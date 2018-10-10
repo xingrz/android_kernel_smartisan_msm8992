@@ -533,6 +533,11 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_camera_i2c_client *sensor_i2c_client;
 	struct msm_camera_slave_info *slave_info;
 	const char *sensor_name;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	struct msm_camera_power_ctrl_t *ctrl;
+	unsigned gpio_num;
+	int vendor_id = 0;
+#endif
 
 	if (!s_ctrl) {
 		pr_err("%s:%d failed: %p\n",
@@ -542,6 +547,9 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 	sensor_i2c_client = s_ctrl->sensor_i2c_client;
 	slave_info = s_ctrl->sensordata->slave_info;
 	sensor_name = s_ctrl->sensordata->sensor_name;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	ctrl = &s_ctrl->sensordata->power_info;
+#endif
 
 	if (!sensor_i2c_client || !slave_info || !sensor_name) {
 		pr_err("%s:%d failed: %p %p %p\n",
@@ -564,6 +572,15 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		pr_err("msm_sensor_match_id chip id doesnot match\n");
 		return -ENODEV;
 	}
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	gpio_num = ctrl->gpio_conf->gpio_num_info->gpio_num[SENSOR_GPIO_CUSTOM1];
+	vendor_id = gpio_get_value_cansleep(gpio_num);
+	if (vendor_id != slave_info->vendor_id) {
+		pr_err("vendor id doesnot match\n");
+		return -ENODEV;
+	}
+#endif
 	return rc;
 }
 

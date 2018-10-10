@@ -202,6 +202,13 @@ struct msm_sensor_id_info_t {
 	unsigned short sensor_id_mask;
 };
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+struct msm_sensor_vendor_id_info_t {
+	unsigned short sensor_vendor_id;
+	unsigned short sensor_vendor_id_mask;
+};
+#endif
+
 struct msm_camera_sensor_slave_info {
 	char sensor_name[32];
 	char eeprom_name[32];
@@ -213,6 +220,9 @@ struct msm_camera_sensor_slave_info {
 	enum i2c_freq_mode_t i2c_freq_mode;
 	enum msm_camera_i2c_reg_addr_type addr_type;
 	struct msm_sensor_id_info_t sensor_id_info;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	struct msm_sensor_vendor_id_info_t sensor_vendor_id_info;
+#endif
 	struct msm_sensor_power_setting_array power_setting_array;
 	unsigned char  is_init_params_valid;
 	struct msm_sensor_init_params sensor_init_params;

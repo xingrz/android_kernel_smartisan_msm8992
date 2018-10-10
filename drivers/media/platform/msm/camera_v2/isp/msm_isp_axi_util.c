@@ -506,8 +506,14 @@ void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev,
 				msm_isp_cfg_framedrop_reg(vfe_dev, stream_info);
 			}
 		}
+#ifdef CONFIG_VENDOR_SMARTISAN
+		if (stream_info->stream_type != BURST_STREAM ||
+			SRC_TO_INTF(stream_info->stream_src) != frame_src)
+			continue;
+#else
 		if (stream_info->stream_type != BURST_STREAM)
 			continue;
+#endif
 
 		if (stream_info->runtime_framedrop_update_burst) {
 			stream_info->runtime_framedrop_update_burst = 0;
