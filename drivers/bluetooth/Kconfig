@@ -262,4 +262,18 @@ config MSM_BT_POWER
 	  Provides a parameter to switch on/off power from PMIC
 	  to Bluetooth device.
 
+config BCM_BT_POWER
+	tristate "BCM Bluetooth Power Control"
+	depends on ARCH_MSM && RFKILL
+	default m
+	help
+	  Provides a parameter to switch on/off power to Bluetooth device.
+
+config BCM_BT_BLUESLEEP
+	tristate "BCM Bluetooth LPM"
+	depends on ARCH_MSM && RFKILL
+	default m
+	help
+	  Provides a parameter to LPM driver to Bluetooth device.
+
 endmenu

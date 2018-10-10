@@ -219,7 +219,9 @@ struct msm_hs_port {
 	struct msm_hs_rx rx;
 	atomic_t clk_count;
 	struct msm_hs_wakeup wakeup;
+#ifndef CONFIG_VENDOR_SMARTISAN
 	struct wakeup_source ws;
+#endif
 
 	struct dentry *loopback_dir;
 	struct work_struct clock_off_w; /* work for actual clock off */
@@ -396,7 +398,9 @@ static void msm_hs_resource_unvote(struct msm_hs_port *msm_uport)
 	MSM_HS_DBG("%s(): power usage count %d", __func__, rc);
 	if (rc <= 0) {
 		MSM_HS_WARN("%s(): rc zero, bailing\n", __func__);
+#ifndef CONFIG_VENDOR_SMARTISAN
 		WARN_ON(1);
+#endif
 		return;
 	}
 	atomic_dec(&msm_uport->clk_count);
@@ -1170,7 +1174,11 @@ static void msm_hs_set_termios(struct uart_port *uport,
 	if (c_cflag & CRTSCTS) {
 		data |= UARTDM_MR1_CTS_CTL_BMSK;
 		data |= UARTDM_MR1_RX_RDY_CTL_BMSK;
+#ifdef CONFIG_VENDOR_SMARTISAN
+		msm_uport->flow_control = false;
+#else
 		msm_uport->flow_control = true;
+#endif
 	}
 	msm_hs_write(uport, UART_DM_MR1, data);
 
@@ -1595,6 +1603,13 @@ static void msm_serial_hs_rx_work(struct kthread_work *work)
 
 	msm_uport = container_of((struct kthread_work *) work,
 				 struct msm_hs_port, rx.kwork);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (msm_uport == NULL) {
+		MSM_HS_ERR("%s(): msm_uport == NULL, something wrong", __func__);
+		return;
+	}
+#endif
+
 	msm_hs_resource_vote(msm_uport);
 	uport = &msm_uport->uport;
 	tty = uport->state->port.tty;
@@ -1602,6 +1617,16 @@ static void msm_serial_hs_rx_work(struct kthread_work *work)
 	rx = &msm_uport->rx;
 	pdev = to_platform_device(uport->dev);
 	pdata = pdev->dev.platform_data;
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	/* if any pointer == NULL, return */
+	if (!(uport && tty && rx)) {
+		MSM_HS_ERR("%s(): NULL pointer, pls check", __func__);
+		MSM_HS_ERR("%s(): uport:%p, tty:%p, rx:%p", __func__, uport, tty, rx);
+		msm_hs_resource_unvote(msm_uport);
+		return;
+	}
+#endif
 
 	spin_lock_irqsave(&uport->lock, flags);
 
@@ -1617,6 +1642,15 @@ static void msm_serial_hs_rx_work(struct kthread_work *work)
 		status = msm_hs_read(uport, UART_DM_SR);
 
 		MSM_HS_DBG("In %s\n", __func__);
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+		if (tty->port == NULL) {
+			MSM_HS_ERR("%s(): tty->port == NULL in loop\n", __func__);
+			spin_unlock_irqrestore(&uport->lock, flags);
+			msm_hs_resource_unvote(msm_uport);
+			return;
+		}
+#endif
 
 		/* overflow is not connect to data in a FIFO */
 		if (unlikely((status & UARTDM_SR_OVERRUN_BMSK) &&
@@ -1936,6 +1970,9 @@ void msm_hs_set_mctrl_locked(struct uart_port *uport,
 				    unsigned int mctrl)
 {
 	unsigned int set_rts;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	unsigned int data;
+#endif
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
 	MSM_HS_DBG("%s()", __func__);
@@ -1946,10 +1983,31 @@ void msm_hs_set_mctrl_locked(struct uart_port *uport,
 	/* RTS is active low */
 	set_rts = TIOCM_RTS & mctrl ? 0 : 1;
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	/* fix msm hsuart flow control bug */
+	if (set_rts) {
+		data = msm_hs_read(uport, UART_DM_MR1);
+		/* disable auto ready-for-receiving */
+		data &= ~UARTDM_MR1_RX_RDY_CTL_BMSK;
+		msm_hs_write(uport, UART_DM_MR1, data);
+		/* Disable RFR line */
+		msm_hs_write(uport, UART_DM_CR, RFR_HIGH);
+		mb();
+	} else {
+		/* Enable RFR line */
+		msm_hs_write(uport, UART_DM_CR, RFR_LOW);
+		/* Enable auto RFR */
+		data = msm_hs_read(uport, UART_DM_MR1);
+		data |= UARTDM_MR1_RX_RDY_CTL_BMSK;
+		msm_hs_write(uport, UART_DM_MR1, data);
+		mb();
+	}
+#else
 	if (set_rts)
 		msm_hs_disable_flow_control(uport, false);
 	else
 		msm_hs_enable_flow_control(uport, false);
+#endif
 }
 
 void msm_hs_set_mctrl(struct uart_port *uport,
@@ -2223,7 +2281,9 @@ void msm_hs_request_clock_off(struct uart_port *uport)
 	if (msm_uport->obs)
 		atomic_set(&msm_uport->client_req_state, 1);
 	msm_hs_resource_unvote(msm_uport);
+#ifndef CONFIG_VENDOR_SMARTISAN
 	__pm_relax(&msm_uport->ws);
+#endif
 }
 EXPORT_SYMBOL(msm_hs_request_clock_off);
 
@@ -2232,7 +2292,9 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 	msm_hs_resource_vote(UARTDM_TO_MSM(uport));
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 	__pm_stay_awake(&msm_uport->ws);
+#endif
 	if (msm_uport->pm_state != MSM_HS_PM_ACTIVE) {
 		MSM_HS_WARN("%s(): %p runtime PM callback not invoked",
 			__func__, uport->dev);
@@ -2244,6 +2306,24 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 		atomic_set(&msm_uport->client_req_state, 0);
 }
 EXPORT_SYMBOL(msm_hs_request_clock_on);
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+void msm_hs_set_clock(int port_index, int on)
+{
+	struct uart_port *uport = msm_hs_get_uart_port(port_index);
+
+	MSM_HS_INFO("%s /dev/ttyHS%d clock: %s\n", __func__, port_index, on ? "ON" : "OFF");
+
+	if (on) {
+		msm_hs_request_clock_on(uport);
+		msm_hs_set_mctrl(uport, TIOCM_RTS);
+	} else {
+		msm_hs_set_mctrl(uport, 0);
+		msm_hs_request_clock_off(uport);
+	}
+}
+EXPORT_SYMBOL(msm_hs_set_clock);
+#endif
 
 static irqreturn_t msm_hs_wakeup_isr(int irq, void *dev)
 {
@@ -2451,7 +2531,9 @@ static int msm_hs_startup(struct uart_port *uport)
 	struct msm_hs_rx *rx = &msm_uport->rx;
 	struct sps_pipe *sps_pipe_handle_tx = tx->cons.pipe_handle;
 	struct sps_pipe *sps_pipe_handle_rx = rx->prod.pipe_handle;
+#ifndef CONFIG_VENDOR_SMARTISAN
 	struct tty_struct *tty = msm_uport->uport.state->port.tty;
+#endif
 
 	rfr_level = uport->fifosize;
 	if (rfr_level > 16)
@@ -2485,7 +2567,9 @@ static int msm_hs_startup(struct uart_port *uport)
 		}
 	}
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 	wakeup_source_init(&msm_uport->ws, tty->name);
+#endif
 	ret = msm_hs_config_uart_gpios(uport);
 	if (ret) {
 		MSM_HS_ERR("Uart GPIO request failed\n");
@@ -2593,7 +2677,9 @@ sps_disconnect_tx:
 unconfig_uart_gpios:
 	msm_hs_unconfig_uart_gpios(uport);
 deinit_ws:
+#ifndef CONFIG_VENDOR_SMARTISAN
 	wakeup_source_trash(&msm_uport->ws);
+#endif
 free_uart_irq:
 	free_irq(uport->irq, msm_uport);
 unvote_exit:
@@ -3421,7 +3507,9 @@ static void msm_hs_shutdown(struct uart_port *uport)
 	else
 		disable_irq(uport->irq);
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 	wakeup_source_trash(&msm_uport->ws);
+#endif
 	msm_uport->wakeup.enabled = false;
 	/* make sure tx lh finishes */
 	flush_kthread_worker(&msm_uport->tx.kworker);

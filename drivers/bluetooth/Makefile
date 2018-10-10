@@ -21,6 +21,11 @@ obj-$(CONFIG_BT_MRVL_SDIO)	+= btmrvl_sdio.o
 obj-$(CONFIG_BT_WILINK)		+= btwilink.o
 obj-$(CONFIG_MSM_BT_POWER)	+= bluetooth-power.o
 
+ifdef CONFIG_VENDOR_SMARTISAN
+obj-$(CONFIG_BCM_BT_POWER)	+= bluepower.o
+obj-$(CONFIG_BCM_BT_BLUESLEEP)	+= bluesleep.o
+endif
+
 btmrvl-y			:= btmrvl_main.o
 btmrvl-$(CONFIG_DEBUG_FS)	+= btmrvl_debugfs.o
 
