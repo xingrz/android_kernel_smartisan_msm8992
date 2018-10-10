@@ -10,4 +10,8 @@ obj-$(CONFIG_NFC_MEI_PHY)	+= mei_phy.o
 obj-$(CONFIG_NFC_QNCI)		+= nfc-nci.o
 obj-$(CONFIG_NFC_NQ)		+= nq-nci.o
 
+ifdef CONFIG_VENDOR_SMARTISAN
+obj-$(CONFIG_BCM2079X_NFC)	+= bcm2079x-i2c.o
+endif
+
 ccflags-$(CONFIG_NFC_DEBUG) := -DDEBUG
