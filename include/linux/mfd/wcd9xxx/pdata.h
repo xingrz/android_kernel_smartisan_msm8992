@@ -206,6 +206,10 @@ struct wcd9xxx_pdata {
 	u32 mad_dmic_sample_rate;
 	enum codec_variant cdc_variant;
 	u16 use_pinctrl;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int external_pa_switch;
+	int external_pa_en;
+#endif
 };
 
 #endif

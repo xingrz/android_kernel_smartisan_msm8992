@@ -2101,6 +2101,7 @@ static int msm_compr_volume_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifdef AUDIO_QCOM_COMPRESS_EFFECT
 static int msm_compr_audio_effects_config_put(struct snd_kcontrol *kcontrol,
 					   struct snd_ctl_elem_value *ucontrol)
 {
@@ -2300,6 +2301,7 @@ static int msm_compr_query_audio_effect_get(struct snd_kcontrol *kcontrol,
 	values[4] = (long)audio_effects->query.device;
 	return 0;
 }
+#endif
 
 static int msm_compr_send_dec_params(struct snd_compr_stream *cstream,
 				     struct msm_compr_dec_params *dec_params,
@@ -2565,6 +2567,7 @@ static int msm_compr_volume_info(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifdef AUDIO_QCOM_COMPRESS_EFFECT
 static int msm_compr_audio_effects_config_info(struct snd_kcontrol *kcontrol,
 					       struct snd_ctl_elem_info *uinfo)
 {
@@ -2584,6 +2587,7 @@ static int msm_compr_query_audio_effect_info(struct snd_kcontrol *kcontrol,
 	uinfo->value.integer.max = 0xFFFFFFFF;
 	return 0;
 }
+#endif
 
 static int msm_compr_dec_params_info(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_info *uinfo)
@@ -2661,6 +2665,7 @@ static int msm_compr_add_volume_control(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 }
 
+#ifdef AUDIO_QCOM_COMPRESS_EFFECT
 static int msm_compr_add_audio_effects_control(struct snd_soc_pcm_runtime *rtd)
 {
 	const char *mixer_ctl_name = "Audio Effects Config";
@@ -2750,6 +2755,7 @@ static int msm_compr_add_query_audio_effect_control(
 	kfree(mixer_str);
 	return 0;
 }
+#endif
 
 static int msm_compr_gapless_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
@@ -2950,6 +2956,7 @@ static int msm_compr_new(struct snd_soc_pcm_runtime *rtd)
 	if (rc)
 		pr_err("%s: Could not add Compr Volume Control\n", __func__);
 
+#ifdef AUDIO_QCOM_COMPRESS_EFFECT
 	rc = msm_compr_add_audio_effects_control(rtd);
 	if (rc)
 		pr_err("%s: Could not add Compr Audio Effects Control\n",
@@ -2959,6 +2966,7 @@ static int msm_compr_new(struct snd_soc_pcm_runtime *rtd)
 	if (rc)
 		pr_err("%s: Could not add Compr Query Audio Effect Control\n",
 			__func__);
+#endif
 
 	rc = msm_compr_add_dec_runtime_params_control(rtd);
 	if (rc)

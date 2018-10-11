@@ -106,7 +106,12 @@
  * Invalid voltage range for the detection
  * of plug type with current source
  */
+#ifdef CONFIG_VENDOR_SMARTISAN
+/*change here to support the devices such as lakala*/
+#define WCD9XXX_CS_MEAS_INVALD_RANGE_LOW_MV 265
+#else
 #define WCD9XXX_CS_MEAS_INVALD_RANGE_LOW_MV 160
+#endif
 #define WCD9XXX_CS_MEAS_INVALD_RANGE_HIGH_MV 265
 
 /*
@@ -126,7 +131,11 @@
 /* RX_HPH_CNP_WG_TIME increases by 0.24ms */
 #define WCD9XXX_WG_TIME_FACTOR_US	240
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define WCD9XXX_V_CS_HS_MAX 800
+#else
 #define WCD9XXX_V_CS_HS_MAX 500
+#endif
 #define WCD9XXX_V_CS_NO_MIC 5
 #define WCD9XXX_MB_MEAS_DELTA_MAX_MV 80
 #define WCD9XXX_CS_MEAS_DELTA_MAX_MV 12
@@ -2479,7 +2488,10 @@ static void wcd9xxx_mbhc_decide_swch_plug(struct wcd9xxx_mbhc *mbhc)
 		wcd9xxx_schedule_hs_detect_plug(mbhc,
 						&mbhc->correct_plug_swch);
 	} else if (plug_type == PLUG_TYPE_HEADPHONE) {
+/*change here to fixed the bug of 0064005: headset and headphone detected*/
+#ifndef CONFIG_VENDOR_SMARTISAN
 		wcd9xxx_report_plug(mbhc, 1, SND_JACK_HEADPHONE);
+#endif
 		wcd9xxx_cleanup_hs_polling(mbhc);
 		wcd9xxx_schedule_hs_detect_plug(mbhc,
 						&mbhc->correct_plug_swch);
@@ -3132,6 +3144,9 @@ static void wcd9xxx_correct_swch_plug(struct work_struct *work)
 	bool correction = false;
 	bool current_source_enable;
 	bool wrk_complete = true, highhph = false;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int retry_headphone = 0;
+#endif
 
 	pr_debug("%s: enter\n", __func__);
 
@@ -3208,7 +3223,16 @@ static void wcd9xxx_correct_swch_plug(struct work_struct *work)
 				WCD9XXX_BCL_UNLOCK(mbhc->resmgr);
 			}
 		} else if (plug_type == PLUG_TYPE_HEADPHONE) {
+#ifdef CONFIG_VENDOR_SMARTISAN
+			/*change here to fixed the bug of 0064005: headset and headphone detected
+			 *report headphone here
+			 */
+			pr_debug("Good headphone detected, continue polling , retry_headphone = %d\n", retry_headphone);
+			retry_headphone ++;
+			if (retry_headphone == 3) {
+#else
 			pr_debug("Good headphone detected, continue polling\n");
+#endif
 			WCD9XXX_BCL_LOCK(mbhc->resmgr);
 			if (mbhc->mbhc_cfg->detect_extn_cable) {
 				if (mbhc->current_plug != plug_type)
@@ -3219,6 +3243,9 @@ static void wcd9xxx_correct_swch_plug(struct work_struct *work)
 						    SND_JACK_HEADPHONE);
 			}
 			WCD9XXX_BCL_UNLOCK(mbhc->resmgr);
+#ifdef CONFIG_VENDOR_SMARTISAN
+			}
+#endif
 		} else if (plug_type == PLUG_TYPE_HIGH_HPH) {
 			pr_debug("%s: High HPH detected, continue polling\n",
 				  __func__);
