@@ -243,7 +243,11 @@ module_param_named(
 	first_est_dump, fg_est_dump, int, S_IRUSR | S_IWUSR
 );
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static char *fg_batt_type = "smartisan_icesky_2690mah";
+#else
 static char *fg_batt_type;
+#endif
 module_param_named(
 	battery_type, fg_batt_type, charp, S_IRUSR | S_IWUSR
 );
@@ -1166,20 +1170,76 @@ static bool fg_is_batt_empty(struct fg_chip *chip)
 #define EMPTY_CAPACITY		0
 #define DEFAULT_CAPACITY	50
 #define MISSING_CAPACITY	100
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+/**
+  * Func: trim battery soc value.
+  *
+  * Trim Rule Used:
+  *
+  * 	> Take [0 ~ 100] as an example:
+  *
+  *             Trim as 0 		if:    [0, 25)
+  *             Trim as 50	if:    [25, 75)
+  *             Trim as 100 	if:    [75, 99)
+  *
+  * Para:
+  *             raw_soc: raw soc value
+  *
+  * Return: new trimmed soc value with scope [0, 1000] and resolution of 5.
+  */
+int trim_bat_soc(int raw_soc)
+{
+	int remainder = 0, new_soc = 0;
+
+	if (raw_soc <= 0)
+		return 0;
+	else if (raw_soc >= FULL_PERCENT)
+		return 1000;
+
+	raw_soc = raw_soc * (10000/FULL_PERCENT);
+
+	remainder = raw_soc % 100;
+	new_soc = raw_soc - remainder;
+
+	if (remainder >= 25 && remainder < 75)
+		new_soc += 50;
+	else if (remainder >= 75)
+		new_soc += 100;
+
+	new_soc /= 10;
+
+	pr_debug("%s raw_soc=%d new_soc=%d\n", __func__, raw_soc, new_soc);
+	return new_soc;
+}
+#endif
+
 static int get_prop_capacity(struct fg_chip *chip)
 {
 	u8 cap[2];
 	int rc, capacity = 0, tries = 0;
 
 	if (chip->battery_missing)
+#ifdef CONFIG_VENDOR_SMARTISAN
+		return MISSING_CAPACITY * SOC_RADIX;
+#else
 		return MISSING_CAPACITY;
+#endif
 	if (!chip->profile_loaded && !chip->use_otp_profile)
+#ifdef CONFIG_VENDOR_SMARTISAN
+		return DEFAULT_CAPACITY * SOC_RADIX;
+#else
 		return DEFAULT_CAPACITY;
+#endif
 	if (chip->soc_empty) {
 		if (fg_debug_mask & FG_POWER_SUPPLY)
 			pr_info_ratelimited("capacity: %d, EMPTY\n",
 					EMPTY_CAPACITY);
+#ifdef CONFIG_VENDOR_SMARTISAN
+		return EMPTY_CAPACITY * SOC_RADIX;
+#else
 		return EMPTY_CAPACITY;
+#endif
 	}
 	while (tries < MAX_TRIES_SOC) {
 		rc = fg_read(chip, cap,
@@ -1201,8 +1261,12 @@ static int get_prop_capacity(struct fg_chip *chip)
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	capacity = trim_bat_soc(cap[0]);
+#else
 	if (cap[0] > 0)
 		capacity = (cap[0] * 100 / FULL_PERCENT);
+#endif
 
 	if (fg_debug_mask & FG_POWER_SUPPLY)
 		pr_info_ratelimited("capacity: %d, raw: 0x%02x\n",
@@ -1437,11 +1501,18 @@ static int64_t twos_compliment_extend(int64_t val, int nbytes)
 #define DECIKELVIN	2730
 #define SRAM_PERIOD_NO_ID_UPDATE_MS	100
 #define FULL_PERCENT_28BIT		0xFFFFFFF
+#ifdef CONFIG_VENDOR_SMARTISAN
+extern struct smbchg_chip *g_smbchg_chip;
+extern int smbchg_set_high_usb_chg_current(struct smbchg_chip *chip, int current_ma);
+#endif
 static void update_sram_data(struct fg_chip *chip, int *resched_ms)
 {
 	int i, j, rc = 0;
 	u8 reg[4];
 	int64_t temp;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	static int times = 0;
+#endif
 	int battid_valid = fg_is_batt_id_valid(chip);
 
 	fg_stay_awake(&chip->update_sram_wakeup_source);
@@ -1473,6 +1544,23 @@ static void update_sram_data(struct fg_chip *chip, int *resched_ms)
 			fg_data[i].value = div_s64(
 					(s64)temp * LSB_16B_NUMRTR,
 					LSB_16B_DENMTR);
+#ifdef CONFIG_VENDOR_SMARTISAN
+			if (g_smbchg_chip &&
+				(fg_data[i].value < -1700000 ||
+				(fg_data[i].value < -1000000 && get_prop_capacity(chip) >= 950))) {
+				times ++;
+				if (times >= 2) {
+					times = 0;
+					smbchg_set_high_usb_chg_current(g_smbchg_chip, 450);
+					pr_info("%s soc=%d current=%d limit usb chg current to 450mA.\n",
+							__func__, get_prop_capacity(chip), fg_data[i].value);
+				} else
+					pr_info("%s soc=%d current=%d times=%d.\n",
+							__func__, get_prop_capacity(chip), fg_data[i].value, times);
+			} else {
+				times = 0;
+			}
+#endif
 			break;
 		case FG_DATA_BATT_ESR:
 			fg_data[i].value = float_decode((u16) temp);
@@ -1651,6 +1739,14 @@ static int fg_set_resume_soc(struct fg_chip *chip, u8 threshold)
 	u16 address;
 	int offset, rc;
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	/* if we set resume_soc = 99 here, resume_soc =99 * 255 / 100 = 252. Then write 252 to fg register.
+	 * When this resume threshold trigger, we calculate this value again. resume_soc = 252 * 100 / 255 = 98.
+	 * The resume soc will become to 98. 254 * 100 / 255 = 99.6, so we set 253 to make sure resume charge at 99%
+	 * Notice: 253 * 100 / 255 = 99.2 cannot work.
+	 */
+	threshold = 254;
+#endif
 	address = settings[FG_MEM_RESUME_SOC].address;
 	offset = settings[FG_MEM_RESUME_SOC].offset;
 
@@ -2542,7 +2638,11 @@ static void status_change_work(struct work_struct *work)
 			enable_irq_wake(chip->batt_irq[VBATT_LOW].irq);
 			chip->vbat_low_irq_enabled = true;
 		}
+#ifdef CONFIG_VENDOR_SMARTISAN
+		if (get_prop_capacity(chip) / SOC_RADIX == 100)
+#else
 		if (get_prop_capacity(chip) == 100)
+#endif
 			fg_configure_soc(chip);
 	} else if (chip->status == POWER_SUPPLY_STATUS_DISCHARGING) {
 		if (chip->vbat_low_irq_enabled) {
@@ -2925,8 +3025,13 @@ static void set_resume_soc_work(struct work_struct *work)
 	if (is_input_present(chip) && !chip->resume_soc_lowered) {
 		if (!chip->charge_done)
 			goto done;
+#ifdef CONFIG_VENDOR_SMARTISAN
+		resume_soc = get_prop_capacity(chip) / SOC_RADIX
+			- (100 - settings[FG_MEM_RESUME_SOC].value);
+#else
 		resume_soc = get_prop_capacity(chip)
 			- (100 - settings[FG_MEM_RESUME_SOC].value);
+#endif
 		if (resume_soc > 0) {
 			resume_soc_raw = soc_to_setpoint(resume_soc);
 			rc = fg_set_resume_soc(chip, resume_soc_raw);
@@ -3225,6 +3330,40 @@ static void update_cc_cv_setpoint(struct fg_chip *chip)
 		pr_info("Wrote %x %x to address %x for CC_CV setpoint\n",
 			tmp[0], tmp[1], CC_CV_SETPOINT_REG);
 }
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+/**
+ * batt_create_fs: create debugfs file system.
+ * @return pointer to root directory or NULL if failed to create fs
+ */
+static struct dentry *batt_create_fs(void)
+{
+	struct dentry *root, *file;
+
+	pr_debug("Creating FG_MEM debugfs file-system\n");
+	root = debugfs_create_dir("batt_ready", NULL);
+	if (IS_ERR_OR_NULL(root)) {
+		pr_err("Error creating top level directory err:%ld",
+			(long)root);
+		if (PTR_ERR(root) == -ENODEV)
+			pr_err("debugfs is not enabled in the kernel");
+		return NULL;
+	}
+
+	dbgfs_data.help_msg.size = strlen(dbgfs_data.help_msg.data);
+
+	file = debugfs_create_blob("ready", S_IRUGO, root, &dbgfs_data.help_msg);
+	if (!file) {
+		pr_err("error creating help entry\n");
+		goto err_remove_fs;
+	}
+	return root;
+
+err_remove_fs:
+	debugfs_remove_recursive(root);
+	return NULL;
+}
+#endif
 
 #define LOW_LATENCY			BIT(6)
 #define BATT_PROFILE_OFFSET		0x4C0
@@ -3566,6 +3705,9 @@ done:
 	chip->first_profile_loaded = true;
 	chip->profile_loaded = true;
 	chip->battery_missing = is_battery_missing(chip);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	batt_create_fs();
+#endif
 	update_chg_iterm(chip);
 	update_cc_cv_setpoint(chip);
 	rc = populate_system_data(chip);
@@ -4568,9 +4710,15 @@ static int fg_common_hw_init(struct fg_chip *chip)
 		}
 	}
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	rc = fg_mem_masked_write(chip, settings[FG_MEM_DELTA_SOC].address, 0xFF,
+			settings[FG_MEM_DELTA_SOC].value,
+			settings[FG_MEM_DELTA_SOC].offset);
+#else
 	rc = fg_mem_masked_write(chip, settings[FG_MEM_DELTA_SOC].address, 0xFF,
 			soc_to_setpoint(settings[FG_MEM_DELTA_SOC].value),
 			settings[FG_MEM_DELTA_SOC].offset);
+#endif
 	if (rc) {
 		pr_err("failed to write delta soc rc=%d\n", rc);
 		return rc;
@@ -4805,8 +4953,12 @@ static void delayed_init_work(struct work_struct *work)
 		&chip->update_jeita_setting,
 		msecs_to_jiffies(INIT_JEITA_DELAY_MS));
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	update_sram_data_work(&chip->update_sram_data.work);
+#else
 	if (chip->last_sram_update_time == 0)
 		update_sram_data_work(&chip->update_sram_data.work);
+#endif
 
 	if (chip->last_temp_update_time == 0)
 		update_temp_data(&chip->update_temp_work.work);

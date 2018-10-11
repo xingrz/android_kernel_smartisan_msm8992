@@ -354,7 +354,11 @@ static void power_supply_callback(struct power_supply *psy)
 	if (bms_psy) {
 		battery_percentage = bms_psy->get_property(bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
+#ifdef CONFIG_VENDOR_SMARTISAN
+		battery_percentage = ret.intval / SOC_RADIX;
+#else
 		battery_percentage = ret.intval;
+#endif
 		battery_soc_val = battery_percentage;
 		pr_debug("Battery SOC reported:%d", battery_soc_val);
 		prev_soc_state = bcl_soc_state;

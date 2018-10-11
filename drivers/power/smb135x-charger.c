@@ -1067,7 +1067,11 @@ static int smb135x_get_usb_chg_current(struct smb135x_chg *chip)
 	else
 		return chip->real_usb_psy_ma;
 }
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define FCC_MASK			SMB135X_MASK(5, 0)
+#else
 #define FCC_MASK			SMB135X_MASK(4, 0)
+#endif
 #define CFG_1C_REG			0x1C
 static int smb135x_get_fastchg_current(struct smb135x_chg *chip)
 {

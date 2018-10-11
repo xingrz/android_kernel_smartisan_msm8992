@@ -77,7 +77,11 @@ module_param(override_phy_init, int, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(override_phy_init, "Override HSPHY Init Seq");
 
 /* Enable Proprietary charger detection */
+#ifdef CONFIG_VENDOR_SMARTISAN
+static bool prop_chg_detect = true;
+#else
 static bool prop_chg_detect;
+#endif
 module_param(prop_chg_detect, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(prop_chg_detect, "Enable Proprietary charger detection");
 
@@ -2296,6 +2300,9 @@ static int dwc3_msm_power_get_property_usb(struct power_supply *psy,
 	return 0;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+extern bool is_cur_550mA;
+#endif
 static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 				  enum power_supply_property psp,
 				  const union power_supply_propval *val)
@@ -2359,6 +2366,13 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		mdwc->current_max = val->intval;
+#ifdef CONFIG_VENDOR_SMARTISAN
+		if (550000 == val->intval)
+			is_cur_550mA = true;
+		else
+			is_cur_550mA = false;
+		dev_info(mdwc->dev, "%s set_cur_max=%d\n", __func__, val->intval);
+#endif
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		psy->type = val->intval;
@@ -2435,6 +2449,9 @@ dwc3_msm_property_is_writeable(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+#ifdef CONFIG_VENDOR_SMARTISAN
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+#endif
 		return 1;
 	default:
 		break;
