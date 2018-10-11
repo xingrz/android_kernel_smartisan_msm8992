@@ -59,24 +59,45 @@
 #define TOMTOM_EXT_CLK_RATE         9600000
 #define ADSP_STATE_READY_TIMEOUT_MS    3000
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define MSM_PRI_MI2S_MASTER
+#endif
+
 enum pinctrl_pin_state {
 	STATE_DISABLE = 0,   /* All pins are in sleep state */
+#ifdef CONFIG_VENDOR_SMARTISAN
+	STATE_AUXPCM_ACTIVE,   /* Aux PCM = active, Primary MI2S = sleep */
+	STATE_PRI_MI2S_ACTIVE, /* Aux PCM = sleep, Primary MI2S = active */
+#else
 	STATE_AUXPCM_ACTIVE, /* Aux PCM = active, MI2S = sleep */
 	STATE_MI2S_ACTIVE,   /* Aux PCM = sleep, MI2S = active */
+#endif
 	STATE_ACTIVE         /* All pins are in active state */
 };
 
 enum mi2s_pcm_mux {
+#ifdef CONFIG_VENDOR_SMARTISAN
+	PRI_MI2S_PCM = 0,
+#else
 	PRI_MI2S_PCM = 1,
+#endif
 	SEC_MI2S_PCM,
 	TERT_MI2S_PCM,
+#ifdef CONFIG_VENDOR_SMARTISAN
+	QUAT_MI2S_PCM
+#else
 	QUAD_MI2S_PCM
+#endif
 };
 
 struct msm_pinctrl_info {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *disable;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	struct pinctrl_state *pri_mi2s_active;
+#else
 	struct pinctrl_state *mi2s_active;
+#endif
 	struct pinctrl_state *auxpcm_active;
 	struct pinctrl_state *active;
 	enum pinctrl_pin_state curr_state;
@@ -109,7 +130,9 @@ static int msm_btsco_rate = SAMPLING_RATE_8KHZ;
 static int msm_hdmi_rx_ch = 2;
 static int msm_proxy_rx_ch = 2;
 static int hdmi_rx_sample_rate = SAMPLING_RATE_48KHZ;
+#ifndef CONFIG_VENDOR_SMARTISAN
 static int msm_pri_mi2s_tx_ch = 2;
+#endif
 
 static struct mutex cdc_mclk_mutex;
 static struct clk *codec_clk;
@@ -135,8 +158,13 @@ static struct audio_plug_dev *apq8094_db_ext_fp_in_dev;
 static struct audio_plug_dev *apq8094_db_ext_fp_out_dev;
 
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static const char *const pin_states[] = {"sleep", "auxpcm-active",
+					 "pri-mi2s-active", "active"};
+#else
 static const char *const pin_states[] = {"sleep", "auxpcm-active",
 					 "mi2s-active", "active"};
+#endif
 static const char *const spk_function[] = {"Off", "On"};
 static const char *const slim0_rx_ch_text[] = {"One", "Two"};
 static const char *const vi_feed_ch_text[] = {"One", "Two"};
@@ -169,15 +197,27 @@ static int msm_snd_enable_codec_ext_clk(struct snd_soc_codec *codec,
 					int enable, bool dapm);
 
 static struct wcd9xxx_mbhc_config mbhc_cfg = {
+#ifdef CONFIG_VENDOR_SMARTISAN
+	.read_fw_bin = true,
+#else
 	.read_fw_bin = false,
+#endif
 	.calibration = NULL,
 	.micbias = MBHC_MICBIAS2,
 	.anc_micbias = MBHC_MICBIAS2,
 	.mclk_cb_fn = msm_snd_enable_codec_ext_clk,
 	.mclk_rate = TOMTOM_EXT_CLK_RATE,
+#ifdef CONFIG_VENDOR_SMARTISAN
+	.gpio_level_insert = 0,
+	//disable the extension cable detected
+	.detect_extn_cable = false,
+	.micbias_enable_flags = 1 << MBHC_MICBIAS_ENABLE_THRESHOLD_HEADSET |
+			        1 << MBHC_MICBIAS_ENABLE_REGULAR_HEADSET,
+#else
 	.gpio_level_insert = 1,
 	.detect_extn_cable = true,
 	.micbias_enable_flags = 1 << MBHC_MICBIAS_ENABLE_THRESHOLD_HEADSET,
+#endif
 	.insert_detect = true,
 	.swap_gnd_mic = NULL,
 	.cs_enable_flags = (1 << MBHC_CS_ENABLE_POLLING |
@@ -190,7 +230,11 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.hw_jack_type = SIX_POLE_JACK,
 };
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static struct afe_clk_cfg pri_mi2s_clk = {
+#else
 static struct afe_clk_cfg mi2s_tx_clk = {
+#endif
 	AFE_API_VERSION_I2S_CONFIG,
 	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
 	Q6AFE_LPASS_OSR_CLK_DISABLE,
@@ -199,6 +243,12 @@ static struct afe_clk_cfg mi2s_tx_clk = {
 	Q6AFE_LPASS_MODE_CLK1_VALID,
 	0,
 };
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+static atomic_t pri_mi2s_rsc_ref;
+static int pri_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
+static int pri_mi2s_bit_format = SNDRV_PCM_FORMAT_S16_LE;
+#endif
 
 static inline int param_is_mask(int p)
 {
@@ -676,10 +726,18 @@ static const struct snd_soc_dapm_widget msm8994_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Lineout_2 amp", NULL),
 	SND_SOC_DAPM_SPK("Lineout_4 amp", NULL),
 	SND_SOC_DAPM_SPK("ultrasound amp", msm_ext_ultrasound_event),
+#ifdef CONFIG_VENDOR_SMARTISAN
+	SND_SOC_DAPM_MIC("Primary Mic", NULL),
+#else
 	SND_SOC_DAPM_MIC("Handset Mic", NULL),
+#endif
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
+#ifdef CONFIG_VENDOR_SMARTISAN
+	SND_SOC_DAPM_MIC("Secondary Mic", NULL),
+#else
 	SND_SOC_DAPM_MIC("ANCRight Headset Mic", NULL),
 	SND_SOC_DAPM_MIC("ANCLeft Headset Mic", NULL),
+#endif
 	SND_SOC_DAPM_MIC("Analog Mic4", NULL),
 	SND_SOC_DAPM_MIC("Analog Mic5", NULL),
 	SND_SOC_DAPM_MIC("Analog Mic6", NULL),
@@ -1102,6 +1160,90 @@ static int msm8994_auxpcm_rate_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static int pri_mi2s_sample_rate_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	int sample_rate_val = 0;
+
+	switch (pri_mi2s_sample_rate) {
+	case SAMPLING_RATE_192KHZ:
+		sample_rate_val = 2;
+		break;
+
+	case SAMPLING_RATE_96KHZ:
+		sample_rate_val = 1;
+		break;
+
+	case SAMPLING_RATE_48KHZ:
+	default:
+		sample_rate_val = 0;
+		break;
+	}
+
+	ucontrol->value.integer.value[0] = sample_rate_val;
+
+	return 0;
+}
+
+static int pri_mi2s_sample_rate_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+
+	switch (ucontrol->value.integer.value[0]) {
+	case 2:
+		pri_mi2s_sample_rate = SAMPLING_RATE_192KHZ;
+		break;
+	case 1:
+		pri_mi2s_sample_rate = SAMPLING_RATE_96KHZ;
+		break;
+	case 0:
+	default:
+		pri_mi2s_sample_rate = SAMPLING_RATE_48KHZ;
+	}
+
+	pr_debug("%s: sample_rate = %d\n", __func__, pri_mi2s_sample_rate);
+
+	return 0;
+}
+
+static int pri_mi2s_bit_format_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+
+	switch (pri_mi2s_bit_format) {
+	case SNDRV_PCM_FORMAT_S24_LE:
+		ucontrol->value.integer.value[0] = 1;
+		break;
+
+	case SNDRV_PCM_FORMAT_S16_LE:
+	default:
+		ucontrol->value.integer.value[0] = 0;
+		break;
+	}
+
+
+
+	return 0;
+}
+
+static int pri_mi2s_bit_format_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case 1:
+		pri_mi2s_bit_format = SNDRV_PCM_FORMAT_S24_LE;
+		break;
+	case 0:
+	default:
+		pri_mi2s_bit_format = SNDRV_PCM_FORMAT_S16_LE;
+		break;
+	}
+	pr_debug("%s: bit_format = %d \n", __func__, pri_mi2s_bit_format);
+	return 0;
+}
+#endif
+
 static int msm_proxy_rx_ch_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -1217,6 +1359,18 @@ static int msm_set_pinctrl(struct msm_pinctrl_info *pinctrl_info,
 			goto err;
 		}
 		break;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	case STATE_PRI_MI2S_ACTIVE:
+		ret = pinctrl_select_state(pinctrl_info->pinctrl,
+					   pinctrl_info->pri_mi2s_active);
+		if (ret) {
+			pr_err("%s: MI2S state select failed with %d\n",
+				__func__, ret);
+			ret = -EIO;
+			goto err;
+		}
+		break;
+#else
 	case STATE_MI2S_ACTIVE:
 		ret = pinctrl_select_state(pinctrl_info->pinctrl,
 					   pinctrl_info->mi2s_active);
@@ -1227,6 +1381,7 @@ static int msm_set_pinctrl(struct msm_pinctrl_info *pinctrl_info,
 			goto err;
 		}
 		break;
+#endif
 	case STATE_ACTIVE:
 		ret = pinctrl_select_state(pinctrl_info->pinctrl,
 					   pinctrl_info->active);
@@ -1281,6 +1436,18 @@ static int msm_reset_pinctrl(struct msm_pinctrl_info *pinctrl_info,
 			goto err;
 		}
 		break;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	case STATE_PRI_MI2S_ACTIVE:
+		ret = pinctrl_select_state(pinctrl_info->pinctrl,
+					   pinctrl_info->pri_mi2s_active);
+		if (ret) {
+			pr_err("%s: MI2S state select failed with %d\n",
+				__func__, ret);
+			ret = -EIO;
+			goto err;
+		}
+		break;
+#else
 	case STATE_MI2S_ACTIVE:
 		ret = pinctrl_select_state(pinctrl_info->pinctrl,
 					   pinctrl_info->mi2s_active);
@@ -1291,6 +1458,7 @@ static int msm_reset_pinctrl(struct msm_pinctrl_info *pinctrl_info,
 			goto err;
 		}
 		break;
+#endif
 	case STATE_DISABLE:
 		ret = pinctrl_select_state(pinctrl_info->pinctrl,
 					   pinctrl_info->disable);
@@ -1362,12 +1530,21 @@ static int msm_get_pinctrl(struct platform_device *pdev)
 		pr_err("%s: could not get auxpcm pinstate\n", __func__);
 		goto err;
 	}
+#ifdef CONFIG_VENDOR_SMARTISAN
+	pinctrl_info->pri_mi2s_active = pinctrl_lookup_state(pinctrl,
+						"pri-mi2s-active");
+	if (IS_ERR(pinctrl_info->pri_mi2s_active)) {
+		pr_err("%s: could not get mi2s pinstate\n", __func__);
+		goto err;
+	}
+#else
 	pinctrl_info->mi2s_active = pinctrl_lookup_state(pinctrl,
 						"mi2s-active");
 	if (IS_ERR(pinctrl_info->mi2s_active)) {
 		pr_err("%s: could not get mi2s pinstate\n", __func__);
 		goto err;
 	}
+#endif
 	pinctrl_info->active = pinctrl_lookup_state(pinctrl,
 						"active");
 	if (IS_ERR(pinctrl_info->active)) {
@@ -1484,6 +1661,252 @@ static struct snd_soc_ops msm_sec_auxpcm_be_ops = {
 	.shutdown = msm_sec_auxpcm_shutdown,
 };
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+int msm_q6_enable_pri_mi2s_clocks(bool enable)
+{
+	union afe_port_config port_config;
+	int rc = 0;
+
+	pr_debug("%s: enable %d\n", __func__, enable);
+	if (enable) {
+		port_config.i2s.channel_mode = AFE_PORT_I2S_SD0;
+		port_config.i2s.mono_stereo = MSM_AFE_CH_STEREO;
+		port_config.i2s.bit_width = 16;
+		port_config.i2s.i2s_cfg_minor_version = AFE_API_VERSION_I2S_CONFIG;
+		port_config.i2s.sample_rate = SAMPLING_RATE_48KHZ;
+		port_config.i2s.ws_src = 1;
+
+		rc = afe_port_start(AFE_PORT_ID_PRIMARY_MI2S_RX, &port_config, SAMPLING_RATE_48KHZ);
+		if (IS_ERR_VALUE(rc)) {
+			pr_err("%s: fail to open AFE port\n", __func__);
+			return -EINVAL;
+		}
+	} else {
+		rc = afe_close(AFE_PORT_ID_PRIMARY_MI2S_RX);
+		if (IS_ERR_VALUE(rc)) {
+			pr_err("%s: fail to close AFE port\n", __func__);
+			return -EINVAL;
+		}
+	}
+	return rc;
+}
+
+int msm8994_pri_mi2s_clk_enable(bool enable)
+{
+	int ret = 0;
+	struct snd_soc_card *card = platform_get_drvdata(spdev);
+	struct msm8994_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	struct msm_pinctrl_info *pinctrl_info = &pdata->pinctrl_info;
+
+	pr_debug("%s: rsc ref = %d\n", __func__, atomic_read(&pri_mi2s_rsc_ref));
+	if (enable) {
+		if (atomic_inc_return(&pri_mi2s_rsc_ref) == 1) {
+			if (pinctrl_info == NULL) {
+				pr_err("%s: pinctrl_info is NULL\n", __func__);
+				ret = -EINVAL;
+				goto err;
+			}
+			if (pdata->pri_mux != NULL)
+				iowrite32(I2S_PCM_SEL_I2S << I2S_PCM_SEL_OFFSET,
+					  pdata->pri_mux);
+			else
+				pr_err("%s: MI2S muxsel addr is NULL\n", __func__);
+
+			ret = msm_set_pinctrl(pinctrl_info, STATE_PRI_MI2S_ACTIVE);
+			if (ret) {
+				pr_err("%s: MI2S TLMM pinctrl set failed with %d\n",
+				       __func__, ret);
+				goto err;
+			}
+			pri_mi2s_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+			pri_mi2s_clk.clk_src = Q6AFE_LPASS_CLK_SRC_INTERNAL;
+			pri_mi2s_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+
+			ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX, &pri_mi2s_clk);
+			if (ret < 0) {
+				pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
+				goto err;
+			}
+
+			ret = msm_q6_enable_pri_mi2s_clocks(enable);
+			if (ret) {
+				pr_err("%s: Enable Primary MI2S WS Clock failed with %d\n",
+				       __func__, ret);
+				goto err;
+			}
+		}
+	} else {
+		if (atomic_dec_return(&pri_mi2s_rsc_ref) == 0) {
+			ret = msm_q6_enable_pri_mi2s_clocks(enable);
+			if (ret) {
+				pr_err("%s: Disable Primary MI2S WS Clock failed with %d\n",
+				       __func__, ret);
+				goto err;
+			}
+
+			pri_mi2s_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
+			pri_mi2s_clk.clk_val2 = Q6AFE_LPASS_OSR_CLK_DISABLE;
+			pri_mi2s_clk.clk_src = Q6AFE_LPASS_CLK_SRC_INTERNAL;
+			pri_mi2s_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+			ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX, &pri_mi2s_clk);
+			if (ret < 0) {
+				pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
+				goto err;
+			}
+
+			ret = msm_reset_pinctrl(pinctrl_info, STATE_PRI_MI2S_ACTIVE);
+			if (ret) {
+				pr_err("%s: Reset pinctrl failed with %d\n",
+				       __func__, ret);
+				goto err;
+			}
+		}
+	}
+
+err:
+	return ret;
+}
+EXPORT_SYMBOL(msm8994_pri_mi2s_clk_enable);
+
+static int msm8994_pri_mi2s_snd_startup(struct snd_pcm_substream *substream)
+{
+	int ret = 0;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct msm8994_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	struct msm_pinctrl_info *pinctrl_info = &pdata->pinctrl_info;
+
+	pr_info("%s: dai name %s %p  substream = %s  stream = %d bit width =%d sample rate =%d  \n", __func__, cpu_dai->name, cpu_dai->dev,substream->name,
+			substream->stream, pri_mi2s_bit_format, pri_mi2s_sample_rate);
+
+	if (atomic_inc_return(&pri_mi2s_rsc_ref) == 1) {
+		if (pinctrl_info == NULL) {
+			pr_err("%s: pinctrl_info is NULL\n", __func__);
+			ret = -EINVAL;
+			goto err;
+		}
+
+		if (pdata->pri_mux != NULL)
+			iowrite32(I2S_PCM_SEL_I2S << I2S_PCM_SEL_OFFSET,
+					pdata->pri_mux);
+		else
+			pr_err("%s: MI2S muxsel addr is NULL\n", __func__);
+
+		ret = msm_set_pinctrl(pinctrl_info, STATE_PRI_MI2S_ACTIVE);
+		if (ret) {
+			pr_err("%s: MI2S TLMM pinctrl set failed with %d\n",
+				__func__, ret);
+			return ret;
+		}
+		if (pri_mi2s_bit_format == SNDRV_PCM_FORMAT_S24_LE) {
+			switch(pri_mi2s_sample_rate) {
+			case SAMPLING_RATE_192KHZ :
+				pri_mi2s_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_12_P288_MHZ;
+			case SAMPLING_RATE_96KHZ :
+				pri_mi2s_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_6_P144_MHZ;
+			case SAMPLING_RATE_48KHZ :
+			default:
+				pri_mi2s_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ;
+			}
+		} else {
+			switch(pri_mi2s_sample_rate) {
+			case SAMPLING_RATE_192KHZ :
+				pri_mi2s_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_6_P144_MHZ;
+			case SAMPLING_RATE_96KHZ :
+				pri_mi2s_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_3_P072_MHZ;
+			case SAMPLING_RATE_48KHZ :
+			default:
+				pri_mi2s_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+			}
+		}
+
+#ifdef MSM_PRI_MI2S_MASTER
+#ifdef MSM_PRI_MI2S_MCLK
+		pri_mi2s_clk.clk_val2 = Q6AFE_LPASS_OSR_CLK_12_P288_MHZ;
+		pri_mi2s_clk.clk_set_mode = Q6AFE_LPASS_MODE_BOTH_VALID;
+#else
+		pri_mi2s_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+#endif
+
+		ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX, &pri_mi2s_clk);
+		if (ret < 0) {
+			pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
+			goto err;
+		}
+
+		ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_CBS_CFS);
+		if (ret < 0)
+			pr_err("%s: set fmt cpu dai failed, err:%d\n", __func__, ret);
+#else
+		pri_mi2s_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+		pri_mi2s_clk.clk_src = Q6AFE_LPASS_CLK_SRC_EXTERNAL;
+		ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX, &pri_mi2s_clk);
+		if (ret < 0) {
+			pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
+			goto err;
+		}
+
+		ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_CBM_CFM);
+		if (ret < 0)
+			pr_err("%s: set fmt cpu dai failed, err:%d\n", __func__, ret);
+#endif
+	}
+
+err:
+	return ret;
+}
+
+static void msm8994_pri_mi2s_snd_shutdown(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct msm8994_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	struct msm_pinctrl_info *pinctrl_info = &pdata->pinctrl_info;
+	int ret = 0;
+
+	pr_info("%s: dai name %s %p  substream = %s  stream = %d  \n", __func__, cpu_dai->name, cpu_dai->dev,substream->name, substream->stream);
+
+	if (atomic_dec_return(&pri_mi2s_rsc_ref) == 0) {
+		pri_mi2s_clk.clk_val1 = Q6AFE_LPASS_IBIT_CLK_DISABLE;
+		pri_mi2s_clk.clk_val2 = Q6AFE_LPASS_OSR_CLK_DISABLE;
+		pri_mi2s_clk.clk_src =Q6AFE_LPASS_CLK_SRC_INTERNAL;
+		pri_mi2s_clk.clk_set_mode = Q6AFE_LPASS_MODE_CLK1_VALID;
+		ret = afe_set_lpass_clock(AFE_PORT_ID_PRIMARY_MI2S_RX, &pri_mi2s_clk);
+		if (ret < 0)
+			pr_err("%s: afe lpass clock failed, err:%d\n", __func__, ret);
+
+		ret = msm_reset_pinctrl(pinctrl_info, STATE_PRI_MI2S_ACTIVE);
+		if (ret)
+			pr_err("%s: Reset pinctrl failed with %d\n",
+				__func__, ret);
+		pr_info("%s Primary MI2S Clock is Disabled", __func__);
+	}
+}
+
+static int msm_be_pri_mi2s_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+					    struct snd_pcm_hw_params *params)
+{
+	struct snd_interval *rate = hw_param_interval(params,
+	SNDRV_PCM_HW_PARAM_RATE);
+
+	struct snd_interval *channels = hw_param_interval(params,
+			SNDRV_PCM_HW_PARAM_CHANNELS);
+	param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
+			   pri_mi2s_bit_format);
+	rate->min = rate->max = pri_mi2s_sample_rate;
+	channels->min = channels->max =2;
+	pr_debug("%s Primary MI2S Sample Rate =%d, bit Format = %d \n",
+			__func__, pri_mi2s_sample_rate, pri_mi2s_bit_format);
+	return 0;
+}
+
+static struct snd_soc_ops msm8994_pri_mi2s_be_ops = {
+	.startup = msm8994_pri_mi2s_snd_startup,
+	.shutdown = msm8994_pri_mi2s_snd_shutdown,
+};
+#else
 static int msm_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 				struct snd_pcm_hw_params *params)
 {
@@ -1570,6 +1993,7 @@ static struct snd_soc_ops msm8994_mi2s_be_ops = {
 	.startup = msm8994_mi2s_snd_startup,
 	.shutdown = msm8994_mi2s_snd_shutdown,
 };
+#endif
 
 static int msm_slim_0_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					    struct snd_pcm_hw_params *params)
@@ -1721,6 +2145,12 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			slim0_tx_bit_format_get, slim0_tx_bit_format_put),
 	SOC_ENUM_EXT("SLIM_0_TX SampleRate", msm_snd_enum[5],
 			slim0_tx_sample_rate_get, slim0_tx_sample_rate_put),
+#ifdef CONFIG_VENDOR_SMARTISAN
+	SOC_ENUM_EXT("PRI_MI2S BitWidth", msm_snd_enum[4],
+			pri_mi2s_bit_format_get, pri_mi2s_bit_format_put),
+	SOC_ENUM_EXT("PRI_MI2S SampleRate", msm_snd_enum[5],
+			pri_mi2s_sample_rate_get, pri_mi2s_sample_rate_put),
+#endif
 };
 
 static bool msm8994_swap_gnd_mic(struct snd_soc_codec *codec)
@@ -1891,10 +2321,18 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "Lineout_2 amp");
 	snd_soc_dapm_ignore_suspend(dapm, "Lineout_4 amp");
 	snd_soc_dapm_ignore_suspend(dapm, "ultrasound amp");
+#ifdef CONFIG_VENDOR_SMARTISAN
+	snd_soc_dapm_ignore_suspend(dapm, "Primary Mic");
+#else
 	snd_soc_dapm_ignore_suspend(dapm, "Handset Mic");
+#endif
 	snd_soc_dapm_ignore_suspend(dapm, "Headset Mic");
+#ifdef CONFIG_VENDOR_SMARTISAN
+	snd_soc_dapm_ignore_suspend(dapm, "Secondary Mic");
+#else
 	snd_soc_dapm_ignore_suspend(dapm, "ANCRight Headset Mic");
 	snd_soc_dapm_ignore_suspend(dapm, "ANCLeft Headset Mic");
+#endif
 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic1");
 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic2");
 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic3");
@@ -2887,6 +3325,23 @@ static struct snd_soc_dai_link msm8994_common_dai_links[] = {
 		.codec_dai_name = "tomtom_mad1",
 		.codec_name = "tomtom_codec",
 	},
+#ifdef CONFIG_VENDOR_SMARTISAN
+	{
+		.name = "Primary MI2S RX_Hostless",
+		.stream_name = "Primary MI2S_RX Hostless Playback",
+		.cpu_dai_name = "PRI_MI2S_RX_HOSTLESS",
+		.platform_name = "msm-pcm-hostless",
+		.dynamic = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		/* this dainlink has playback support */
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+	},
+#endif
 	{
 		.name = "MultiMedia3 Record",
 		.stream_name = "MultiMedia3 Capture",
@@ -3180,6 +3635,21 @@ static struct snd_soc_dai_link msm8994_common_dai_links[] = {
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_suspend = 1,
 	},
+#ifdef CONFIG_VENDOR_SMARTISAN
+	{
+		.name = LPASS_BE_PRI_MI2S_RX,
+		.stream_name = "Primary MI2S Playback",
+		.cpu_dai_name = "msm-dai-q6-mi2s.0",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.be_id = MSM_BACKEND_DAI_PRI_MI2S_RX,
+		.be_hw_params_fixup = msm_be_pri_mi2s_hw_params_fixup,
+		.ops = &msm8994_pri_mi2s_be_ops,
+		.ignore_suspend = 1,
+	},
+#endif
 	{
 		.name = LPASS_BE_PRI_MI2S_TX,
 		.stream_name = "Primary MI2S Capture",
@@ -3189,8 +3659,13 @@ static struct snd_soc_dai_link msm8994_common_dai_links[] = {
 		.codec_dai_name = "msm-stub-tx",
 		.no_pcm = 1,
 		.be_id = MSM_BACKEND_DAI_PRI_MI2S_TX,
+#ifdef CONFIG_VENDOR_SMARTISAN
+		.be_hw_params_fixup = msm_be_pri_mi2s_hw_params_fixup,
+		.ops = &msm8994_pri_mi2s_be_ops,
+#else
 		.be_hw_params_fixup = msm_tx_be_hw_params_fixup,
 		.ops = &msm8994_mi2s_be_ops,
+#endif
 		.ignore_suspend = 1,
 	}
 };
@@ -3500,6 +3975,9 @@ static int msm8994_asoc_machine_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "msm8994_prepare_us_euro failed (%d)\n",
 			ret);
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	atomic_set(&pri_mi2s_rsc_ref, 0);
+#endif
 	/* Parse pinctrl info from devicetree */
 	ret = msm_get_pinctrl(pdev);
 	if (!ret) {

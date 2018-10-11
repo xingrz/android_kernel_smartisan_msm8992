@@ -34,6 +34,9 @@
 #include <linux/pm_runtime.h>
 #include <linux/kernel.h>
 #include <linux/gpio.h>
+#ifdef CONFIG_VENDOR_SMARTISAN
+#include <soc/qcom/socinfo.h>
+#endif
 #include "wcd9330.h"
 #include "wcd9xxx-resmgr.h"
 #include "wcd9xxx-common.h"
@@ -79,6 +82,13 @@ enum {
 
 #define SLIM_BW_CLK_GEAR_9 6200000
 #define SLIM_BW_UNVOTE 0
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define UART_HEADSET_SEL 919  //gpio41
+
+static int ext_pa_switch;
+static int ext_pa_en;
+#endif
 
 static int cpe_debug_mode;
 module_param(cpe_debug_mode, int,
@@ -3040,6 +3050,14 @@ static int tomtom_codec_enable_lineout(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+#ifdef CONFIG_VENDOR_SMARTISAN
+		if (gpio_get_value_cansleep(ext_pa_switch) == 0) {
+			gpio_direction_output(ext_pa_en, 1);
+			usleep_range(10000, 10000);
+			gpio_direction_output(ext_pa_switch, 1);
+			usleep_range(10000, 10000);
+		}
+#endif
 		snd_soc_update_bits(codec, lineout_gain_reg, 0x40, 0x40);
 		break;
 	case SND_SOC_DAPM_POST_PMU:
@@ -3053,6 +3071,14 @@ static int tomtom_codec_enable_lineout(struct snd_soc_dapm_widget *w,
 		usleep_range(5000, 5100);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
+#ifdef CONFIG_VENDOR_SMARTISAN
+		if (gpio_get_value_cansleep(ext_pa_switch) == 1) {
+			gpio_direction_output(ext_pa_switch, 0);
+			usleep_range(10000, 10000);
+			gpio_direction_output(ext_pa_en, 0);
+			usleep_range(10000, 10000);
+		}
+#endif
 		snd_soc_update_bits(codec, lineout_gain_reg, 0x40, 0x00);
 		pr_debug("%s: sleeping 5 ms after %s PA turn off\n",
 			 __func__, w->name);
@@ -8849,6 +8875,28 @@ static int tomtom_codec_probe(struct snd_soc_codec *codec)
 		/* Do not fail probe if CPE failed */
 		ret = 0;
 	}
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	ext_pa_switch = pdata->external_pa_switch;
+	if (ext_pa_switch > 0) {
+		ret = gpio_request(ext_pa_switch, "EXTERNAL_PA_SWITCH");
+		if (ret) {
+			pr_err("%s: Failed to request gpio %d\n", __func__,
+				ext_pa_switch);
+			ext_pa_switch = 0;
+		}
+	}
+
+	ext_pa_en = pdata->external_pa_en;
+	if (ext_pa_en > 0) {
+		ret = gpio_request(ext_pa_en, "EXTERNAL_PA_ENABLE");
+		if (ret) {
+			pr_err("%s: Failed to request gpio %d\n", __func__,
+				ext_pa_en);
+			ext_pa_en = 0;
+		}
+	}
+#endif
 	return ret;
 
 err_pdata:
@@ -8932,6 +8980,18 @@ static const struct dev_pm_ops tomtom_pm_ops = {
 };
 #endif
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+/* Switch between uart and headset by uart_enable passed from cmdline */
+static unsigned int uart_enable = 0;
+
+static int __init uart_sel_setup(char *str)
+{
+	get_option(&str, &uart_enable);
+	return 1;
+}
+__setup("uart_enable=", uart_sel_setup);
+#endif
+
 static int tomtom_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -8941,6 +9001,16 @@ static int tomtom_probe(struct platform_device *pdev)
 	else if (wcd9xxx_get_intf_type() == WCD9XXX_INTERFACE_TYPE_I2C)
 		ret = snd_soc_register_codec(&pdev->dev, &soc_codec_dev_tomtom,
 			tomtom_i2s_dai, ARRAY_SIZE(tomtom_i2s_dai));
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (of_board_is_icesky_p1() ||
+	    of_board_is_icesky_p2() ||
+	    of_board_is_icesky_p3()) {
+		if (uart_enable == 0) {
+			gpio_direction_output(UART_HEADSET_SEL, 0);
+			usleep_range(10000, 10000);
+		}
+	}
+#endif
 	return ret;
 }
 static int tomtom_remove(struct platform_device *pdev)
