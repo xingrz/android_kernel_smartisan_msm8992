@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2016-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -20,6 +20,7 @@
 #include <sound/msm-dts-eagle.h>
 
 #define MAX_CHANNELS_SUPPORTED		8
+#define MAX_PP_PARAMS_SZ		128
 #define WAIT_TIMEDOUT_DURATION_SECS	1
 
 struct q6audio_effects {
@@ -28,8 +29,6 @@ struct q6audio_effects {
 
 	struct audio_client             *ac;
 	struct msm_hwacc_effects_config  config;
-
-	struct mutex			lock;
 
 	atomic_t			in_count;
 	atomic_t			out_count;
@@ -101,7 +100,7 @@ static void audio_effects_event_handler(uint32_t opcode, uint32_t token,
 	struct q6audio_effects *effects;
 
 	if (!payload || !priv) {
-		pr_err("%s: invalid data to handle events, payload: %pK, priv: %pK\n",
+		pr_err("%s: invalid data to handle events, payload: %p, priv: %p\n",
 			__func__, payload, priv);
 		return;
 	}
@@ -148,8 +147,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 	case AUDIO_START: {
 		pr_debug("%s: AUDIO_START\n", __func__);
 
-		mutex_lock(&effects->lock);
-
 		rc = q6asm_open_read_write_v2(effects->ac,
 					FORMAT_LINEAR_PCM,
 					FORMAT_MULTI_CHANNEL_LINEAR_PCM,
@@ -161,14 +158,13 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 			pr_err("%s: Open failed for hw accelerated effects:rc=%d\n",
 				__func__, rc);
 			rc = -EINVAL;
-			mutex_unlock(&effects->lock);
 			goto ioctl_fail;
 		}
 		effects->opened = 1;
 
 		pr_debug("%s: dec buf size: %d, num_buf: %d, enc buf size: %d, num_buf: %d\n",
 			 __func__, effects->config.output.buf_size,
-			 effects->config.output.num_buf,
+			 effects->config.output.buf_size,
 			 effects->config.input.buf_size,
 			 effects->config.input.num_buf);
 		rc = q6asm_audio_client_buf_alloc_contiguous(IN, effects->ac,
@@ -178,7 +174,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 			pr_err("%s: Write buffer Allocation failed rc = %d\n",
 				__func__, rc);
 			rc = -ENOMEM;
-			mutex_unlock(&effects->lock);
 			goto ioctl_fail;
 		}
 		atomic_set(&effects->in_count, effects->config.input.num_buf);
@@ -199,8 +194,7 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 			effects->config.input.num_channels);
 		rc = q6asm_enc_cfg_blk_pcm(effects->ac,
 					   effects->config.input.sample_rate,
-					   effects->config.input.num_channels,
-					   false);
+					   effects->config.input.num_channels);
 		if (rc < 0) {
 			pr_err("%s: pcm read block config failed\n", __func__);
 			rc = -EINVAL;
@@ -230,7 +224,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 			effects->started = 0;
 			pr_err("%s: ASM run state failed\n", __func__);
 		}
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	case AUDIO_EFFECTS_WRITE: {
@@ -238,11 +231,8 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 		uint32_t idx = 0;
 		uint32_t size = 0;
 
-		mutex_lock(&effects->lock);
-
 		if (!effects->started) {
 			rc = -EFAULT;
-			mutex_unlock(&effects->lock);
 			goto ioctl_fail;
 		}
 
@@ -252,23 +242,19 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 		if (!rc) {
 			pr_err("%s: write wait_event_timeout\n", __func__);
 			rc = -EFAULT;
-			 mutex_unlock(&effects->lock);
 			goto ioctl_fail;
 		}
 		if (!atomic_read(&effects->out_count)) {
 			pr_err("%s: pcm stopped out_count 0\n", __func__);
 			rc = -EFAULT;
-			mutex_unlock(&effects->lock);
 			goto ioctl_fail;
 		}
 
 		bufptr = q6asm_is_cpu_buf_avail(IN, effects->ac, &size, &idx);
 		if (bufptr) {
-			if ((effects->config.buf_cfg.output_len > size) ||
-				copy_from_user(bufptr, (void *)arg,
+			if (copy_from_user(bufptr, (void *)arg,
 					effects->config.buf_cfg.output_len)) {
 				rc = -EFAULT;
-				mutex_unlock(&effects->lock);
 				goto ioctl_fail;
 			}
 			rc = q6asm_write(effects->ac,
@@ -276,7 +262,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 					 0, 0, NO_TIMESTAMP);
 			if (rc < 0) {
 				rc = -EFAULT;
-				mutex_unlock(&effects->lock);
 				goto ioctl_fail;
 			}
 			atomic_dec(&effects->out_count);
@@ -284,7 +269,6 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 			pr_err("%s: AUDIO_EFFECTS_WRITE: Buffer dropped\n",
 				__func__);
 		}
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	case AUDIO_EFFECTS_READ: {
@@ -292,11 +276,8 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 		uint32_t idx = 0;
 		uint32_t size = 0;
 
-		mutex_lock(&effects->lock);
-
 		if (!effects->started) {
 			rc = -EFAULT;
-			mutex_unlock(&effects->lock);
 			goto ioctl_fail;
 		}
 
@@ -313,13 +294,11 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 		if (!rc) {
 			pr_err("%s: read wait_event_timeout\n", __func__);
 			rc = -EFAULT;
-			mutex_unlock(&effects->lock);
 			goto ioctl_fail;
 		}
 		if (!atomic_read(&effects->in_count)) {
 			pr_err("%s: pcm stopped in_count 0\n", __func__);
 			rc = -EFAULT;
-			mutex_unlock(&effects->lock);
 			goto ioctl_fail;
 		}
 
@@ -327,18 +306,14 @@ static int audio_effects_shared_ioctl(struct file *file, unsigned cmd,
 		if (bufptr) {
 			if (!((void *)arg)) {
 				rc = -EFAULT;
-				mutex_unlock(&effects->lock);
 				goto ioctl_fail;
 			}
-			if ((effects->config.buf_cfg.input_len > size) ||
-				copy_to_user((void *)arg, bufptr,
+			if (copy_to_user((void *)arg, bufptr,
 					  effects->config.buf_cfg.input_len)) {
 				rc = -EFAULT;
-				mutex_unlock(&effects->lock);
 				goto ioctl_fail;
 			}
 		}
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	default:
@@ -351,7 +326,6 @@ ioctl_fail:
 readbuf_fail:
 	q6asm_audio_client_buf_free_contiguous(IN,
 					effects->ac);
-	mutex_unlock(&effects->lock);
 	return rc;
 cfg_fail:
 	q6asm_audio_client_buf_free_contiguous(IN,
@@ -359,7 +333,6 @@ cfg_fail:
 	q6asm_audio_client_buf_free_contiguous(OUT,
 					effects->ac);
 	effects->buf_alloc = 0;
-	mutex_unlock(&effects->lock);
 	return rc;
 }
 
@@ -463,7 +436,6 @@ static long audio_effects_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case AUDIO_SET_EFFECTS_CONFIG: {
 		pr_debug("%s: AUDIO_SET_EFFECTS_CONFIG\n", __func__);
-		mutex_lock(&effects->lock);
 		memset(&effects->config, 0, sizeof(effects->config));
 		if (copy_from_user(&effects->config, (void *)arg,
 				   sizeof(effects->config))) {
@@ -481,11 +453,9 @@ static long audio_effects_ioctl(struct file *file, unsigned int cmd,
 			 effects->config.input.num_buf,
 			 effects->config.input.sample_rate,
 			 effects->config.input.num_channels);
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	case AUDIO_EFFECTS_SET_BUF_LEN: {
-		mutex_lock(&effects->lock);
 		if (copy_from_user(&effects->config.buf_cfg, (void *)arg,
 				   sizeof(effects->config.buf_cfg))) {
 			pr_err("%s: copy from user for AUDIO_EFFECTS_SET_BUF_LEN failed\n",
@@ -495,7 +465,6 @@ static long audio_effects_ioctl(struct file *file, unsigned int cmd,
 		pr_debug("%s: write buf len: %d, read buf len: %d\n",
 			 __func__, effects->config.buf_cfg.output_len,
 			 effects->config.buf_cfg.input_len);
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	case AUDIO_EFFECTS_GET_BUF_AVAIL: {
@@ -503,7 +472,6 @@ static long audio_effects_ioctl(struct file *file, unsigned int cmd,
 
 		buf_avail.input_num_avail = atomic_read(&effects->in_count);
 		buf_avail.output_num_avail = atomic_read(&effects->out_count);
-		mutex_lock(&effects->lock);
 		pr_debug("%s: write buf avail: %d, read buf avail: %d\n",
 			 __func__, buf_avail.output_num_avail,
 			 buf_avail.input_num_avail);
@@ -513,20 +481,16 @@ static long audio_effects_ioctl(struct file *file, unsigned int cmd,
 				__func__);
 			rc = -EFAULT;
 		}
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	case AUDIO_EFFECTS_SET_PP_PARAMS: {
-		mutex_lock(&effects->lock);
 		if (copy_from_user(argvalues, (void *)arg,
 				   MAX_PP_PARAMS_SZ*sizeof(long))) {
 			pr_err("%s: copy from user for pp params failed\n",
 				__func__);
-			mutex_unlock(&effects->lock);
 			return -EFAULT;
 		}
 		rc = audio_effects_set_pp_param(effects, argvalues);
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	default:
@@ -592,14 +556,12 @@ static long audio_effects_compat_ioctl(struct file *file, unsigned int cmd,
 	case AUDIO_SET_EFFECTS_CONFIG32: {
 		struct msm_hwacc_effects_config32 config32;
 		struct msm_hwacc_effects_config *config = &effects->config;
-		mutex_lock(&effects->lock);
 		memset(&effects->config, 0, sizeof(effects->config));
 		if (copy_from_user(&config32, (void *)arg,
 				   sizeof(config32))) {
 			pr_err("%s: copy to user for AUDIO_SET_EFFECTS_CONFIG failed\n",
 				__func__);
 			rc = -EFAULT;
-			mutex_unlock(&effects->lock);
 			break;
 		}
 		config->input.buf_size = config32.input.buf_size;
@@ -636,19 +598,16 @@ static long audio_effects_compat_ioctl(struct file *file, unsigned int cmd,
 			 effects->config.input.num_buf,
 			 effects->config.input.sample_rate,
 			 effects->config.input.num_channels);
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	case AUDIO_EFFECTS_SET_BUF_LEN32: {
 		struct msm_hwacc_buf_cfg32 buf_cfg32;
 		struct msm_hwacc_effects_config *config = &effects->config;
-		mutex_lock(&effects->lock);
 		if (copy_from_user(&buf_cfg32, (void *)arg,
 				   sizeof(buf_cfg32))) {
 			pr_err("%s: copy from user for AUDIO_EFFECTS_SET_BUF_LEN failed\n",
 				__func__);
 			rc = -EFAULT;
-			mutex_unlock(&effects->lock);
 			break;
 		}
 		config->buf_cfg.input_len = buf_cfg32.input_len;
@@ -656,15 +615,11 @@ static long audio_effects_compat_ioctl(struct file *file, unsigned int cmd,
 		pr_debug("%s: write buf len: %d, read buf len: %d\n",
 			 __func__, effects->config.buf_cfg.output_len,
 			 effects->config.buf_cfg.input_len);
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	case AUDIO_EFFECTS_GET_BUF_AVAIL32: {
 		struct msm_hwacc_buf_avail32 buf_avail;
 
-		memset(&buf_avail, 0, sizeof(buf_avail));
-
-		mutex_lock(&effects->lock);
 		buf_avail.input_num_avail = atomic_read(&effects->in_count);
 		buf_avail.output_num_avail = atomic_read(&effects->out_count);
 		pr_debug("%s: write buf avail: %d, read buf avail: %d\n",
@@ -676,26 +631,22 @@ static long audio_effects_compat_ioctl(struct file *file, unsigned int cmd,
 				__func__);
 			rc = -EFAULT;
 		}
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	case AUDIO_EFFECTS_SET_PP_PARAMS32: {
 		long argvalues[MAX_PP_PARAMS_SZ] = {0};
 		int argvalues32[MAX_PP_PARAMS_SZ] = {0};
 
-		mutex_lock(&effects->lock);
 		if (copy_from_user(argvalues32, (void *)arg,
 				   MAX_PP_PARAMS_SZ*sizeof(int))) {
 			pr_err("%s: copy from user failed for pp params\n",
 				__func__);
-			mutex_unlock(&effects->lock);
 			return -EFAULT;
 		}
 		for (i = 0; i < MAX_PP_PARAMS_SZ; i++)
 			argvalues[i] = argvalues32[i];
 
 		rc = audio_effects_set_pp_param(effects, argvalues);
-		mutex_unlock(&effects->lock);
 		break;
 	}
 	case AUDIO_START32: {
@@ -742,7 +693,7 @@ static int audio_effects_release(struct inode *inode, struct file *file)
 				__func__);
 		rc = q6asm_cmd(effects->ac, CMD_CLOSE);
 		if (rc < 0)
-			pr_err("%s[%pK]:Failed to close the session rc=%d\n",
+			pr_err("%s[%p]:Failed to close the session rc=%d\n",
 				__func__, effects, rc);
 		effects->opened = 0;
 		effects->started = 0;
@@ -756,7 +707,6 @@ static int audio_effects_release(struct inode *inode, struct file *file)
 	}
 	q6asm_audio_client_free(effects->ac);
 
-	mutex_destroy(&effects->lock);
 	kfree(effects);
 
 	pr_debug("%s: close session success\n", __func__);
@@ -787,7 +737,6 @@ static int audio_effects_open(struct inode *inode, struct file *file)
 
 	init_waitqueue_head(&effects->read_wait);
 	init_waitqueue_head(&effects->write_wait);
-	mutex_init(&effects->lock);
 
 	effects->opened = 0;
 	effects->started = 0;

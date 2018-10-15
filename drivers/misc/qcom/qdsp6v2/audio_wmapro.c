@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2009-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -18,11 +18,7 @@
 #include <linux/types.h>
 #include <linux/msm_audio_wmapro.h>
 #include <linux/compat.h>
-#include <linux/wakelock.h>
 #include "audio_utils_aio.h"
-
-struct miscdevice audio_wmapro_misc;
-struct ws_mgr     audio_wmapro_ws_mgr;
 
 #ifdef CONFIG_DEBUG_FS
 static const struct file_operations audio_wmapro_debug_fops = {
@@ -47,8 +43,7 @@ static long audio_ioctl_shared(struct file *file, unsigned int cmd,
 			/* Configure PCM output block */
 			rc = q6asm_enc_cfg_blk_pcm(audio->ac,
 					audio->pcm_cfg.sample_rate,
-					audio->pcm_cfg.channel_count,
-					true);
+					audio->pcm_cfg.channel_count);
 			if (rc < 0) {
 				pr_err("pcm output block config failed\n");
 				break;
@@ -67,7 +62,8 @@ static long audio_ioctl_shared(struct file *file, unsigned int cmd,
 			rc = -EINVAL;
 			break;
 		}
-		if (wmapro_config->numchannels > 0) {
+		if ((wmapro_config->numchannels == 1) ||
+		(wmapro_config->numchannels == 2)) {
 			wmapro_cfg.ch_cfg = wmapro_config->numchannels;
 		} else {
 			pr_err("%s:AUDIO_START failed: channels = %d\n",
@@ -75,7 +71,8 @@ static long audio_ioctl_shared(struct file *file, unsigned int cmd,
 			rc = -EINVAL;
 			break;
 		}
-		if (wmapro_config->samplingrate > 0) {
+		if ((wmapro_config->samplingrate <= 48000) ||
+		(wmapro_config->samplingrate > 0)) {
 			wmapro_cfg.sample_rate =
 				wmapro_config->samplingrate;
 		} else {
@@ -106,7 +103,15 @@ static long audio_ioctl_shared(struct file *file, unsigned int cmd,
 			rc = -EINVAL;
 			break;
 		}
-		wmapro_cfg.ch_mask =  wmapro_config->channelmask;
+		if ((wmapro_config->channelmask  == 4) ||
+		(wmapro_config->channelmask == 3)) {
+			wmapro_cfg.ch_mask =  wmapro_config->channelmask;
+		} else {
+			pr_err("%s:AUDIO_START failed: channel_mask = %d\n",
+				__func__, wmapro_config->channelmask);
+			rc = -EINVAL;
+			break;
+		}
 		wmapro_cfg.encode_opt = wmapro_config->encodeopt;
 		wmapro_cfg.adv_encode_opt =
 				wmapro_config->advancedencodeopt;
@@ -171,7 +176,7 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	}
 	default: {
-		pr_debug("%s[%pK]: Calling utils ioctl\n", __func__, audio);
+		pr_debug("%s[%p]: Calling utils ioctl\n", __func__, audio);
 		rc = audio->codec_ioctl(file, cmd, arg);
 		if (rc)
 			pr_err("Failed in utils_ioctl: %d\n", rc);
@@ -188,10 +193,10 @@ struct msm_audio_wmapro_config32 {
 	u8  validbitspersample;
 	u8  numchannels;
 	u16 formattag;
-	u32 samplingrate;
-	u32 avgbytespersecond;
+	u16 samplingrate;
+	u16 avgbytespersecond;
 	u16 asfpacketlength;
-	u32 channelmask;
+	u16 channelmask;
 	u16 encodeopt;
 	u16 advancedencodeopt;
 	u32 advancedencodeopt2;
@@ -214,8 +219,6 @@ static long audio_compat_ioctl(struct file *file, unsigned int cmd,
 	case AUDIO_GET_WMAPRO_CONFIG_32: {
 		struct msm_audio_wmapro_config *wmapro_config;
 		struct msm_audio_wmapro_config32 wmapro_config_32;
-
-		memset(&wmapro_config_32, 0, sizeof(wmapro_config_32));
 
 		wmapro_config =
 			(struct msm_audio_wmapro_config *)audio->codec_cfg;
@@ -281,7 +284,7 @@ static long audio_compat_ioctl(struct file *file, unsigned int cmd,
 		break;
 	}
 	default: {
-		pr_debug("%s[%pK]: Calling utils ioctl\n", __func__, audio);
+		pr_debug("%s[%p]: Calling utils ioctl\n", __func__, audio);
 		rc = audio->codec_compat_ioctl(file, cmd, arg);
 		if (rc)
 			pr_err("Failed in utils_ioctl: %d\n", rc);
@@ -320,9 +323,6 @@ static int audio_open(struct inode *inode, struct file *file)
 
 
 	audio->pcm_cfg.buffer_size = PCM_BUFSZ_MIN;
-	audio->miscdevice = &audio_wmapro_misc;
-	audio->wakelock_voted = false;
-	audio->audio_ws_mgr = &audio_wmapro_ws_mgr;
 
 	audio->ac = q6asm_audio_client_alloc((app_cb) q6_audio_cb,
 					     (void *)audio);
@@ -405,14 +405,7 @@ struct miscdevice audio_wmapro_misc = {
 
 static int __init audio_wmapro_init(void)
 {
-	int ret = misc_register(&audio_wmapro_misc);
-
-	if (ret == 0)
-		device_init_wakeup(audio_wmapro_misc.this_device, true);
-	audio_wmapro_ws_mgr.ref_cnt = 0;
-	mutex_init(&audio_wmapro_ws_mgr.ws_lock);
-
-	return ret;
+	return misc_register(&audio_wmapro_misc);
 }
 
 device_initcall(audio_wmapro_init);
