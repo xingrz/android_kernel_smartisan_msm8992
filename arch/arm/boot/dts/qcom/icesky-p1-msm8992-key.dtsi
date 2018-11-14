@@ -17,18 +17,18 @@
 		input-name = "gpio-keys";
 
 		/* Left up */
-		vol_up_r {
-			label = "volume_up_left";
+		left_up {
+			label = "left_up";
 			gpios = <&pm8994_gpios 3 0x1>;
 			linux,input-type = <1>;
-			linux,code = <3>;
+			linux,code = <116>;
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
 
 		/* Right down */
-		vol_dn_r {
-			label = "volume_down_left";
+		right_down {
+			label = "right_down";
 			gpios = <&pm8994_gpios 1 0x1>;
 			linux,input-type = <1>;
 			linux,code = <114>;
@@ -37,8 +37,8 @@
 		};
 
 		/* Right up */
-		vol_up_l {
-			label = "volume_up_right";
+		right_up {
+			label = "right_up";
 			gpios = <&pm8994_gpios 4 0x1>;
 			linux,input-type = <1>;
 			linux,code = <115>;
@@ -47,18 +47,18 @@
 		};
 
 		/* Nav right */
-		key_back {
-			label = "key_back";
+		nav_right {
+			label = "nav_right";
 			gpios = <&pm8994_gpios 2 0x1>;
 			linux,input-type = <1>;
-			linux,code = <139>;
+			linux,code = <580>;
 			gpio-key,wakeup;
 			debounce-interval = <15>;
 		};
 
 		/* Nav left */
-		key_menu {
-			label = "key_menu";
+		nav_left {
+			label = "nav_left";
 			gpios = <&pm8994_gpios 5 0x1>;
 			linux,input-type = <1>;
 			linux,code = <158>;
@@ -94,13 +94,15 @@
 
 			/* Left down */
 			qcom,pon_2 {
-				linux,code = <2>;
+				label = "left_down";
+				linux,code = <212>;
 			};
 
 			/* Nav middle */
 			qcom,pon_1 {
+				label = "nav_middle";
 				qcom,support-reset = <0>;
-				linux,code = <116>;
+				linux,code = <172>;
 			};
 		};
 	};
